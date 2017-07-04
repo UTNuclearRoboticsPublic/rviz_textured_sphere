@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<package>
+  <name>rviz_textured_sphere</name>
+  <version>0.1.0</version>
+  <description>RVIZ Sphere Display Plugin</description>
+  <maintainer email="veix123@gmail.com">Veiko Vunder</maintainer>
+  <license>BSD</license>
+  <author email="veix123@gmail.com">Veiko Vunder</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>roscpp</build_depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>roslib</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>shape_msgs</build_depend>
+  <build_depend>pluginlib</build_depend>
+  <build_depend>class_loader</build_depend>
+  <build_depend>rviz</build_depend>
+  <build_depend>cv_bridge</build_depend>
+  <build_depend>message_generation</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>cmake_modules</build_depend>
+  <build_depend>eigen_conversions</build_depend>
+  <build_depend>rviz</build_depend>
+
+  <run_depend>roscpp</run_depend>
+  <run_depend>rospy</run_depend>
+  <run_depend>roslib</run_depend>
+  <run_depend>std_msgs</run_depend>
+  <run_depend>sensor_msgs</run_depend>
+  <run_depend>shape_msgs</run_depend>
+  <run_depend>pluginlib</run_depend>
+  <run_depend>class_loader</run_depend>
+  <run_depend>rviz</run_depend>
+  <run_depend>cv_bridge</run_depend>
+  <run_depend>message_runtime</run_depend>
+  <run_depend>geometry_msgs</run_depend>
+  <run_depend>sensor_msgs</run_depend>
+  <run_depend>cmake_modules</run_depend>
+  <run_depend>eigen_conversions</run_depend>
+  <run_depend>rviz</run_depend>
+
+  <export>
+      <rviz plugin="${prefix}/plugin_description.xml"/>
+  </export>
+</package>

@@ -1,0 +1,9 @@
+<library path="lib/librviz_textured_sphere">
+  <class name="rviz_textured_sphere/SphereDisplay"
+         type="rviz::SphereDisplay"
+         base_class_type="rviz::Display">
+    <description>
+      This display plugin creates a sphere with dynamic texture.
+    </description>
+  </class>
+</library>

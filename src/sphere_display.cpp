@@ -47,131 +47,194 @@ bool validateFloats(const sensor_msgs::CameraInfo& msg)
   return valid;
 }
 
-SphereDisplay::SphereDisplay()
-  : Display()
-  , textures_(NULL)
-  , sphere_node_(NULL)
-  , new_image_arrived_(false)
+SphereDisplay::SphereDisplay() :
+	Display(),
+	texture_front_(NULL),
+	texture_rear_(NULL),
+	sphere_node_(NULL),
+	new_front_image_arrived_(false),
+	new_rear_image_arrived_(false)
 {
-  image_topic_property_ = new RosTopicProperty("Image Topic", "",
+  image_topic_front_property_ = new RosTopicProperty("Front camera image", "",
       QString::fromStdString(ros::message_traits::datatype<sensor_msgs::Image>()),
-      "Image topic to subscribe to.",
-      this, SLOT(updateDisplayImages()));
-  tf_frame_property_ = new TfFrameProperty("Quad Frame", "map",
-      "Align the image quad to the xy plane of this tf frame",
+      "Image topic of the front camera to subscribe to.",
+      this, SLOT(onImageTopicChanged()));
+  image_topic_rear_property_ = new RosTopicProperty("Rear camera image", "",
+      QString::fromStdString(ros::message_traits::datatype<sensor_msgs::Image>()),
+      "Image topic of the rear camera to subscribe to.",
+      this, SLOT(onImageTopicChanged()));
+  tf_frame_property_ = new TfFrameProperty("Reference frame", "<Fixed Frame>",
+      "Position the sphere relative to this frame.",
       this, 0, true);
 
-  meters_per_pixel_property_ = new FloatProperty("Meters per pixel", 0.002,
-      "Rviz meters per image pixel.", this);
+  fov_front_property_ = new FloatProperty("FOV front", 190.0,
+      "Front camera field of view", this);
+
+  fov_rear_property_= new FloatProperty("FOV rear", 190.0,
+      "Rear camera field of view", this);
 }
 
 SphereDisplay::~SphereDisplay()
 {
   unsubscribe();
-  delete textures_;
-
-  delete image_topic_property_;
+  delete texture_front_;
+  delete texture_rear_;
+  delete image_topic_front_property_;
+  delete image_topic_rear_property_;
   delete tf_frame_property_;
-  delete meters_per_pixel_property_;
+  delete fov_front_property_;
+  delete fov_rear_property_;
 }
 
 void SphereDisplay::onInitialize()
 {
-  tf_frame_property_->setFrameManager(context_->getFrameManager());
-  Display::onInitialize();
+	tf_frame_property_->setFrameManager(context_->getFrameManager());
+	createSphere();
+	Display::onInitialize();
 }
 
-void SphereDisplay::loadSphere(const sensor_msgs::Image::ConstPtr& image)
+
+void SphereDisplay::createSphere()
 {
-    processImage(0, *image);
+	// Return if node already exists.
+	if(scene_manager_->hasSceneNode("sphere_display_node"))
+	{
+		return; 
+	}
 
-	if(!scene_manager_->hasSceneNode("sphere_display_node"))
-	{			
-		Ogre::String node_name("sphere_display_node");
-		Ogre::String entity_name("sphere_display_mesh");
-		Ogre::String material_name("sphere_display_material");
-		Ogre::String texture_name_front = texture_front_->getTexture()->getName();
-		Ogre::String texture_name_rear = texture_rear_->getTexture()->getName();
+	Ogre::String node_name("sphere_display_node");
+	Ogre::String entity_name("sphere_display_mesh");
+	Ogre::String material_name("sphere_display_material");
 
-		Ogre::MaterialPtr material = Ogre::MaterialManager::getSingleton().create(
-				material_name,
-				Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
-		material->setReceiveShadows(false);
-		material->getTechnique(0)->setLightingEnabled(false);
-		Ogre::Pass* pass = material->getTecnique(0)->getPass(0);
-		pass->setSceneBlending(Ogre::SBT_TRANSPARENT_ALPHA);
-//		material->getTechnique(0)->getPass(0)->setCullingMode(Ogre::CULL_NONE);
-//		material->getTechnique(0)->getPass(0)->setPolygonMode(Ogre::PM_WIREFRAME);
+	sphere_material_ = Ogre::MaterialManager::getSingleton().create(material_name,
+			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
+	sphere_material_->setReceiveShadows(false);
+	sphere_material_->getTechnique(0)->setLightingEnabled(false);
+	Ogre::Pass* pass = sphere_material_->getTechnique(0)->getPass(0);
+	pass->setSceneBlending(Ogre::SBT_TRANSPARENT_ALPHA);
+	//		material->getTechnique(0)->getPass(0)->setCullingMode(Ogre::CULL_NONE);
+	//		material->getTechnique(0)->getPass(0)->setPolygonMode(Ogre::PM_WIREFRAME);
 
-		// Set up texture state for front camera image
-		Ogre::TextureUnitState* unit_state_front = pass->createTextureUnitState(texture_name_front);
-		unit_state_front->setTextureScale(0.5,1);
-		unit_state_front->setTextureAddressingMode(Ogre::TextureUnitState::TAM_BORDER);
+	// Create sphere node and and add mesh entity to the scene
+	sphere_node_ = scene_manager_->getRootSceneNode()->createChildSceneNode(
+			node_name, Ogre::Vector3( 0, 0, 0  ));
+	sphere_node_->setScale(10,10,10);
+	Ogre::Entity* sphere_entity = scene_manager_->createEntity(entity_name, Ogre::SceneManager::PT_SPHERE);
+	sphere_entity->setMaterialName(material_name);
+	sphere_node_->attachObject(sphere_entity);
+}
 
-		// Set up texture state for rear camera image
-		Ogre::TextureUnitState* unit_state_rear = pass->addTextureUnitState(texture_name_rear);
-		unit_state_front->setTextureScale(0.5,1);
-		unit_state_rear->setTextureAddressingMode(Ogre::TextureUnitState::TAM_BORDER);
+void SphereDisplay::updateTexture(ROSImageTexture*& texture)
+{
+	if(!texture)
+	{
+		return;
+	}
 
-		// Create sphere node and and add mesh entity to the scene
-		sphere_node_ = scene_manager_->getRootSceneNode()->createChildSceneNode(node_name, Ogre::Vector3( 0, 0, 0  ));
-		sphere_node_->setScale(10,10,10);
-		Ogre::Entity* sphere_entity = scene_manager_->createEntity(entity_name, Ogre::SceneManager::PT_SPHERE);
-		sphere_entity->setMaterialName(material_name);
-		sphere_node_->attachObject(sphere_entity);
+	Ogre::String texture_name = texture->getTexture()->getName();
+	try
+	{
+		texture->update();
+	}
+	catch (UnsupportedImageEncoding& e)
+	{
+		//setStatus(StatusProperty::Error, "Front camera image", e.what());
+		ROS_ERROR("SphereDisplay::updateTexture[%s]: %s", texture_name.c_str(), e.what());
+		return;
+	}
+
+	// RViz texture successfully updated
+
+	if(sphere_material_.isNull())
+	{
+		ROS_ERROR("SphereDisplay::updateTexture[%s]: sphere_material_ is NULL!", texture_name.c_str());
+		return;
+	}
+
+	// Create Ogre textureUnitState if one does not exist already.
+	Ogre::Pass* pass = sphere_material_->getTechnique(0)->getPass(0);
+	ROS_ERROR("%s %i",texture_name.c_str(),pass->getTextureUnitState(texture_name));
+	if(!pass->getTextureUnitState(texture_name)){
+		Ogre::TextureUnitState* unit_state = pass->createTextureUnitState(texture_name);
+		unit_state->setTextureAddressingMode(Ogre::TextureUnitState::TAM_BORDER);
+		unit_state->setTextureScale(0.5,1);
+
+
+		if(texture_name=="ROSImageTexture1")
+		{
+			unit_state->setColourOperation(Ogre::LBO_ADD);
+		}
 	}
 }
 
 
-void SphereDisplay::updateImage(const sensor_msgs::Image::ConstPtr& image)
+void SphereDisplay::updateFrontCameraImage(const sensor_msgs::Image::ConstPtr& image)
 {
- cur_image_ = image;
- new_image_arrived_ = true;
+	cur_image_front_ = image;
+	new_front_image_arrived_ = true;
+}
+
+void SphereDisplay::updateRearCameraImage(const sensor_msgs::Image::ConstPtr& image)
+{
+	cur_image_rear_ = image;
+	new_rear_image_arrived_ = true;
 }
 
 
-void SphereDisplay::updateDisplayImages()
+void SphereDisplay::onImageTopicChanged()
 {
-  unsubscribe();
-  subscribe();
+	unsubscribe();
+	subscribe();
 }
 
 void SphereDisplay::subscribe()
 {
-  if (!isEnabled())
-  {
-    return;
-  }
+	if (!isEnabled())
+	{
+		return;
+	}
 
-  if (!image_topic_property_->getTopic().isEmpty())
-  {
-    try
-    {
-      image_sub_ = nh_.subscribe(image_topic_property_->getTopicStd(),
-          1, &SphereDisplay::updateImage, this);
-      setStatus(StatusProperty::Ok, "Display Images Topic", "OK");
-    }
-    catch (ros::Exception& e)
-    {
-      setStatus(StatusProperty::Error, "Display Images Topic", QString("Error subscribing: ") + e.what());
-    }
-  }
+	if (!image_topic_front_property_->getTopic().isEmpty())
+	{
+		try
+		{
+			image_sub_ = nh_.subscribe(image_topic_front_property_->getTopicStd(),
+					1, &SphereDisplay::updateFrontCameraImage, this);
+			setStatus(StatusProperty::Ok, "Front camera image", "OK");
+		}
+		catch (ros::Exception& e)
+		{
+			setStatus(StatusProperty::Error, "Front camera image", QString("Error subscribing: ") + e.what());
+		}
+	}
+
+	if (!image_topic_rear_property_->getTopic().isEmpty())
+	{
+		try
+		{
+			image_sub_ = nh_.subscribe(image_topic_rear_property_->getTopicStd(),
+					1, &SphereDisplay::updateRearCameraImage, this);
+		} catch (ros::Exception& e)
+		{
+			setStatus(StatusProperty::Error, "Rear camera image", QString("Error subscribing: ") + e.what());
+		}
+	}
 }
 
 void SphereDisplay::unsubscribe()
 {
-  image_sub_.shutdown();
+	image_sub_.shutdown();
 }
 
 
 void SphereDisplay::onEnable()
 {
-  subscribe();
+	subscribe();
 }
 
 void SphereDisplay::onDisable()
 {
-  unsubscribe();
+	unsubscribe();
 }
 
 void SphereDisplay::preRenderTargetUpdate(const Ogre::RenderTargetEvent& evt)
@@ -180,29 +243,31 @@ void SphereDisplay::preRenderTargetUpdate(const Ogre::RenderTargetEvent& evt)
 
 void SphereDisplay::update(float wall_dt, float ros_dt)
 {
-  context_->queueRender();
-  if (cur_image_)
-  {
-	loadSphere(cur_image_);
-    new_image_arrived_ = false;
-  }
 
-  if (textures_ && !image_topic_property_->getTopic().isEmpty())
-  {
-    try
-    {
-      textures_->update();
-    }
-    catch (UnsupportedImageEncoding& e)
-    {
-      setStatus(StatusProperty::Error, "Display Image", e.what());
-    }
-  }
-  else
-  {
-	  ROS_INFO("no textures_ or empty image_topic_property_");
-  }
+	// Update front texture
+	if(cur_image_front_ && new_front_image_arrived_)
+	{
+		ROS_INFO("update front texture %p", texture_front_);
+		imageToTexture(texture_front_, cur_image_front_);
+		updateTexture(texture_front_);
+		new_front_image_arrived_ = false;
+	}	
 
+	// Update rear texture
+	if(cur_image_rear_ && new_rear_image_arrived_)
+	{
+		ROS_INFO("update front texture %p", texture_front_);
+		imageToTexture(texture_rear_, cur_image_rear_);
+		updateTexture(texture_rear_);
+		new_rear_image_arrived_ = false;
+	}	
+
+	context_->queueRender();
+
+	if(sphere_node_)
+	{
+		sphere_node_->needUpdate();
+	}
 }
 
 
@@ -212,36 +277,41 @@ void SphereDisplay::reset()
 //  clear();
 }
 
-void SphereDisplay::processImage(int index, const sensor_msgs::Image& msg)
+void SphereDisplay::imageToTexture(ROSImageTexture*& texture, const sensor_msgs::Image::ConstPtr& msg)
 {
-   std::cout<<"camera image received with idx:"<<index<<std::endl;
-  cv_bridge::CvImagePtr cv_ptr;
+	cv_bridge::CvImagePtr cv_ptr;
 
-  // simply converting every image to RGBA
-  try
-  {
-    cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::RGBA8);
-  }
-  catch (cv_bridge::Exception& e)
-  {
-    ROS_ERROR("SphereDisplay: cv_bridge exception: %s", e.what());
-    return;
-  }
+	// simply converting every image to RGBA
+	try
+	{
+		cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::RGBA8);
+	}
+	catch (cv_bridge::Exception& e)
+	{
+		ROS_ERROR("SphereDisplay: cv_bridge exception: %s", e.what());
+		return;
+	}
 
-  // add completely white transparent border to the image so that it won't replicate colored pixels all over the mesh
-  // cv::Scalar value(255, 255, 255, 0);
-  //cv::copyMakeBorder(cv_ptr->image, cv_ptr->image, 1, 1, 1, 1, cv::BORDER_CONSTANT, value);
-  //cv::flip(cv_ptr->image, cv_ptr->image, -1);
+	// add completely white transparent border to the image so that it won't replicate colored pixels all over the mesh
+	// cv::Scalar value(255, 255, 255, 0);
+	//cv::copyMakeBorder(cv_ptr->image, cv_ptr->image, 1, 1, 1, 1, cv::BORDER_CONSTANT, value);
+	//cv::flip(cv_ptr->image, cv_ptr->image, -1);
 
-  // Output modified video stream
-  if (textures_ == NULL)
-    textures_ = new ROSImageTexture();
+	// Output modified video stream
+	if (texture==0)
+	{
+		texture = new ROSImageTexture();
+		ROS_INFO("Creating new texture: %s", texture->getTexture()->getName().c_str());
+	}
 
-  textures_->addMessage(cv_ptr->toImageMsg());
-}
-
-void SphereDisplay::load()
-{
+//	if(texture)
+//	{
+//		texture->addMessage(cv_ptr->toImageMsg());
+//	}
+//	else
+//	{
+//		ROS_ERROR("Failed to create texture.");
+//	}
 
 }
 

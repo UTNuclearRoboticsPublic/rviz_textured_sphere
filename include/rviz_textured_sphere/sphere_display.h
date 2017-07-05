@@ -96,16 +96,13 @@ public:
 
 private Q_SLOTS:
   void updateMeshProperties();
-  void updateDisplayImages();
+  void onImageTopicChanged();
 
 protected:
-  virtual void load();
-
   // overrides from Display
   virtual void onEnable();
   virtual void onDisable();
 
-  // This is called by incomingMessage().
   void processImage(int index, const sensor_msgs::Image& msg);
 
   virtual void subscribe();
@@ -113,36 +110,33 @@ protected:
 
 private:
   void clear();
-  void updateImage(const sensor_msgs::Image::ConstPtr& image);
-  void loadSphere(const sensor_msgs::Image::ConstPtr& image);
+  void updateFrontCameraImage(const sensor_msgs::Image::ConstPtr& image);
+  void updateRearCameraImage(const sensor_msgs::Image::ConstPtr& image);
+  void createSphere();
+  void imageToTexture(ROSImageTexture*& texture, const sensor_msgs::Image::ConstPtr& msg);
+  void updateTexture(ROSImageTexture*& texture);
   void clearStates();
 
-  RosTopicProperty* image_topic_property_;
+  RosTopicProperty* image_topic_front_property_;
+  RosTopicProperty* image_topic_rear_property_;
   TfFrameProperty* tf_frame_property_;
-  FloatProperty* meters_per_pixel_property_;
+  FloatProperty* fov_front_property_;
+  FloatProperty* fov_rear_property_;
   ros::Subscriber image_sub_;
-
-  std::vector<shape_msgs::Mesh> last_meshes_;
-  std::vector<geometry_msgs::Pose> mesh_poses_;
-  int img_widths_, img_heights_;
-  float physical_widths_, physical_heights_;
-  std::vector<float> border_colors_;
-  float border_sizes_;
 
   ros::NodeHandle nh_;
 
-  bool new_image_arrived_;
-  sensor_msgs::Image::ConstPtr cur_image_;
-  std::vector<sensor_msgs::Image::ConstPtr> last_images_;
+  bool new_front_image_arrived_;
+  bool new_rear_image_arrived_;
+  sensor_msgs::Image::ConstPtr cur_image_front_;
+  sensor_msgs::Image::ConstPtr cur_image_rear_;
 
   Ogre::SceneNode* sphere_node_;
-  Ogre::MaterialPtr mesh_materials_;
+  Ogre::MaterialPtr sphere_material_;
   ROSImageTexture* texture_front_; // Texture for front camera image
-  ROSImageTexture* textures_rear_; // Texture for rear camera image
+  ROSImageTexture* texture_rear_; // Texture for rear camera image
 
   RenderPanel* render_panel_;  // this is the active render panel
-
-  boost::mutex mesh_mutex_;
 };
 
 }  // namespace rviz

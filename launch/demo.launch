@@ -2,7 +2,7 @@
 <launch>
 
   <node pkg="rviz" type="rviz" name="rviz"
-      args="-d $(find rviz_textured_sphere)/rviz_cfg/rviz_textured_sphere.rviz"
+      args="-l -d $(find rviz_textured_sphere)/rviz_cfg/rviz_textured_sphere.rviz"
       output="screen"/>
 
   <!--node pkg="tf" type="static_transform_publisher" name="quad_broadcaster"

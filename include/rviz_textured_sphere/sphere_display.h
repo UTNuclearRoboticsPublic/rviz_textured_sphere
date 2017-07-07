@@ -97,6 +97,7 @@ public:
 private Q_SLOTS:
   void updateMeshProperties();
   void onImageTopicChanged();
+  void onDebugValueChanged();
 
 protected:
   // overrides from Display
@@ -122,7 +123,10 @@ private:
   TfFrameProperty* tf_frame_property_;
   FloatProperty* fov_front_property_;
   FloatProperty* fov_rear_property_;
-  ros::Subscriber image_sub_;
+  FloatProperty* debug_property_;
+
+  ros::Subscriber image_sub_front_;
+  ros::Subscriber image_sub_rear_;
 
   ros::NodeHandle nh_;
 

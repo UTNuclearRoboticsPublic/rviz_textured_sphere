@@ -72,6 +72,9 @@ SphereDisplay::SphereDisplay() :
 
   fov_rear_property_= new FloatProperty("FOV rear", 190.0,
       "Rear camera field of view", this);
+
+  debug_property_= new FloatProperty("Debug value", 1.0f,
+      "A value for debugging", this, SLOT(onDebugValueChanged()));
 }
 
 SphereDisplay::~SphereDisplay()
@@ -84,6 +87,7 @@ SphereDisplay::~SphereDisplay()
   delete tf_frame_property_;
   delete fov_front_property_;
   delete fov_rear_property_;
+  delete debug_property_;
 }
 
 void SphereDisplay::onInitialize()
@@ -111,71 +115,41 @@ void SphereDisplay::createSphere()
 	sphere_material_->setReceiveShadows(false);
 	sphere_material_->getTechnique(0)->setLightingEnabled(false);
 	Ogre::Pass* pass = sphere_material_->getTechnique(0)->getPass(0);
-	pass->setSceneBlending(Ogre::SBT_TRANSPARENT_ALPHA);
-	//		material->getTechnique(0)->getPass(0)->setCullingMode(Ogre::CULL_NONE);
+	//pass->setSceneBlending(Ogre::SBT_TRANSPARENT_ALPHA);
+	//pass->setSceneBlending(Ogre::SBT_REPLACE);
+	//pass->setSceneBlendOperation
+	sphere_material_->getTechnique(0)->getPass(0)->setCullingMode(Ogre::CULL_NONE);
 	//		material->getTechnique(0)->getPass(0)->setPolygonMode(Ogre::PM_WIREFRAME);
 
 	// Create sphere node and and add mesh entity to the scene
 	sphere_node_ = scene_manager_->getRootSceneNode()->createChildSceneNode(
 			node_name, Ogre::Vector3( 0, 0, 0  ));
+
+	    Ogre::Quaternion r1, r2; // Rotate from RViz coordinates to OpenGL coordinates
+	    r1.FromAngleAxis(Ogre::Radian(M_PI*0.5), Ogre::Vector3::UNIT_X);
+	    r2.FromAngleAxis(Ogre::Radian(-M_PI*0.5), Ogre::Vector3::UNIT_Y);
+	sphere_node_->rotate(r1*r2);
+
+	sphere_node_->setDirection(Ogre::Vector3(1,0,0));
 	sphere_node_->setScale(10,10,10);
 	Ogre::Entity* sphere_entity = scene_manager_->createEntity(entity_name, Ogre::SceneManager::PT_SPHERE);
 	sphere_entity->setMaterialName(material_name);
+	Ogre::Mesh* mesh = sphere_entity->getMesh();
+	//mesh->
 	sphere_node_->attachObject(sphere_entity);
-}
-
-void SphereDisplay::updateTexture(ROSImageTexture*& texture)
-{
-	if(!texture)
-	{
-		return;
-	}
-
-	Ogre::String texture_name = texture->getTexture()->getName();
-	try
-	{
-		texture->update();
-	}
-	catch (UnsupportedImageEncoding& e)
-	{
-		//setStatus(StatusProperty::Error, "Front camera image", e.what());
-		ROS_ERROR("SphereDisplay::updateTexture[%s]: %s", texture_name.c_str(), e.what());
-		return;
-	}
-
-	// RViz texture successfully updated
-
-	if(sphere_material_.isNull())
-	{
-		ROS_ERROR("SphereDisplay::updateTexture[%s]: sphere_material_ is NULL!", texture_name.c_str());
-		return;
-	}
-
-	// Create Ogre textureUnitState if one does not exist already.
-	Ogre::Pass* pass = sphere_material_->getTechnique(0)->getPass(0);
-	ROS_ERROR("%s %i",texture_name.c_str(),pass->getTextureUnitState(texture_name));
-	if(!pass->getTextureUnitState(texture_name)){
-		Ogre::TextureUnitState* unit_state = pass->createTextureUnitState(texture_name);
-		unit_state->setTextureAddressingMode(Ogre::TextureUnitState::TAM_BORDER);
-		unit_state->setTextureScale(0.5,1);
-
-
-		if(texture_name=="ROSImageTexture1")
-		{
-			unit_state->setColourOperation(Ogre::LBO_ADD);
-		}
-	}
 }
 
 
 void SphereDisplay::updateFrontCameraImage(const sensor_msgs::Image::ConstPtr& image)
 {
+	//ROS_WARN("New FRONT image arrived");
 	cur_image_front_ = image;
 	new_front_image_arrived_ = true;
 }
 
 void SphereDisplay::updateRearCameraImage(const sensor_msgs::Image::ConstPtr& image)
 {
+	//ROS_WARN("New REAR image arrived");
 	cur_image_rear_ = image;
 	new_rear_image_arrived_ = true;
 }
@@ -183,12 +157,24 @@ void SphereDisplay::updateRearCameraImage(const sensor_msgs::Image::ConstPtr& im
 
 void SphereDisplay::onImageTopicChanged()
 {
+	//ROS_INFO("onImageTopicChanged()");
+
 	unsubscribe();
 	subscribe();
 }
 
+void SphereDisplay::onDebugValueChanged()
+{
+	ROS_WARN("Value changed");
+	if(!sphere_material_.isNull())
+	{
+		sphere_material_->getTechnique(0)->getPass(0)->removeAllTextureUnitStates();
+	}
+}
+
 void SphereDisplay::subscribe()
 {
+	//ROS_INFO("subscribe()");
 	if (!isEnabled())
 	{
 		return;
@@ -198,13 +184,15 @@ void SphereDisplay::subscribe()
 	{
 		try
 		{
-			image_sub_ = nh_.subscribe(image_topic_front_property_->getTopicStd(),
+			image_sub_front_ = nh_.subscribe(image_topic_front_property_->getTopicStd(),
 					1, &SphereDisplay::updateFrontCameraImage, this);
 			setStatus(StatusProperty::Ok, "Front camera image", "OK");
+			//ROS_WARN("SUBS FRONT OK");
 		}
 		catch (ros::Exception& e)
 		{
 			setStatus(StatusProperty::Error, "Front camera image", QString("Error subscribing: ") + e.what());
+			ROS_ERROR("SUBS FRONT FAILED");
 		}
 	}
 
@@ -212,23 +200,30 @@ void SphereDisplay::subscribe()
 	{
 		try
 		{
-			image_sub_ = nh_.subscribe(image_topic_rear_property_->getTopicStd(),
+			image_sub_rear_ = nh_.subscribe(image_topic_rear_property_->getTopicStd(),
 					1, &SphereDisplay::updateRearCameraImage, this);
+			//ROS_WARN("SUBS REAR OK");
 		} catch (ros::Exception& e)
 		{
 			setStatus(StatusProperty::Error, "Rear camera image", QString("Error subscribing: ") + e.what());
+			ROS_ERROR("SUBS REAR FAILED");
 		}
 	}
 }
 
 void SphereDisplay::unsubscribe()
 {
-	image_sub_.shutdown();
+	
+	//ROS_INFO("unsubscribe()");
+	image_sub_front_.shutdown();
+	image_sub_rear_.shutdown();
 }
 
 
 void SphereDisplay::onEnable()
 {
+	//ROS_INFO("onEnable()");
+
 	subscribe();
 }
 
@@ -243,20 +238,22 @@ void SphereDisplay::preRenderTargetUpdate(const Ogre::RenderTargetEvent& evt)
 
 void SphereDisplay::update(float wall_dt, float ros_dt)
 {
-
+	//ROS_INFO("Update: new front image, %s", new_front_image_arrived_ ? "True":"False");
+	//ROS_INFO("Update: new rear image, %s", new_rear_image_arrived_ ? "True":"False");
 	// Update front texture
-	if(cur_image_front_ && new_front_image_arrived_)
+	if(new_front_image_arrived_)
 	{
-		ROS_INFO("update front texture %p", texture_front_);
+		//ROS_INFO("1update front texture %p", texture_front_);
 		imageToTexture(texture_front_, cur_image_front_);
+		//ROS_INFO("2update front texture %p", texture_front_);
 		updateTexture(texture_front_);
+		//ROS_INFO("3update front texture %p", texture_front_);
 		new_front_image_arrived_ = false;
 	}	
 
 	// Update rear texture
-	if(cur_image_rear_ && new_rear_image_arrived_)
+	if(new_rear_image_arrived_)
 	{
-		ROS_INFO("update front texture %p", texture_front_);
 		imageToTexture(texture_rear_, cur_image_rear_);
 		updateTexture(texture_rear_);
 		new_rear_image_arrived_ = false;
@@ -271,10 +268,55 @@ void SphereDisplay::update(float wall_dt, float ros_dt)
 }
 
 
-void SphereDisplay::reset()
+void SphereDisplay::updateTexture(ROSImageTexture*& texture)
 {
-//  Display::reset();
-//  clear();
+	if(!texture)
+	{
+		return;
+	}
+
+	Ogre::String texture_name = texture->getTexture()->getName();
+
+	try
+	{
+		texture->update();
+	}
+	catch (UnsupportedImageEncoding& e)
+	{
+		setStatus(StatusProperty::Error, "Front camera image", e.what());
+		ROS_ERROR("SphereDisplay::updateTexture[%s]: UnsupportedImageEncoding: %s", texture_name.c_str(), e.what());
+		return;
+	}
+	// RViz ROSImageTexture successfully updated
+
+
+	if(sphere_material_.isNull())
+	{
+		ROS_ERROR("SphereDisplay::updateTexture[%s]: sphere_material_ is NULL!", texture_name.c_str());
+		return;
+	}
+
+	// Create Ogre textureUnitState if one does not exist already.
+	Ogre::Pass* pass = sphere_material_->getTechnique(0)->getPass(0);
+	//	ROS_ERROR("%s numStates() %d",texture_name.c_str(),pass->getNumTextureUnitStates());
+	if(!pass->getTextureUnitState(texture_name)){
+		Ogre::TextureUnitState* unit_state = pass->createTextureUnitState();
+		unit_state->setName(texture_name);
+		unit_state->setTexture(texture->getTexture());
+		unit_state->setTextureAddressingMode(Ogre::TextureUnitState::TAM_BORDER);
+		unit_state->setTextureBorderColour(Ogre::ColourValue(0,0,0,0));
+		unit_state->setTextureScale(debug_property_->getFloat(),1);
+		unit_state->setTextureScroll(0.5,0);
+
+		ROS_INFO("CREATED TEXTURE UNIT STATE: %s",unit_state->getName().c_str());
+		ROS_INFO("ID: %d",pass->getTextureUnitStateIndex(unit_state));
+		if(pass->getTextureUnitStateIndex(unit_state)==1)
+		{
+			unit_state->setTextureScroll(-0.5,0);
+			ROS_INFO("UNIT STATE: %s",unit_state->getName().c_str());
+			unit_state->setColourOperation(Ogre::LBO_ALPHA_BLEND);
+		}
+	}
 }
 
 void SphereDisplay::imageToTexture(ROSImageTexture*& texture, const sensor_msgs::Image::ConstPtr& msg)
@@ -297,22 +339,27 @@ void SphereDisplay::imageToTexture(ROSImageTexture*& texture, const sensor_msgs:
 	//cv::copyMakeBorder(cv_ptr->image, cv_ptr->image, 1, 1, 1, 1, cv::BORDER_CONSTANT, value);
 	//cv::flip(cv_ptr->image, cv_ptr->image, -1);
 
-	// Output modified video stream
 	if (texture==0)
 	{
 		texture = new ROSImageTexture();
-		ROS_INFO("Creating new texture: %s", texture->getTexture()->getName().c_str());
+	  ROS_INFO("Creating new texture: %s", texture->getTexture()->getName().c_str());
 	}
 
-//	if(texture)
-//	{
-//		texture->addMessage(cv_ptr->toImageMsg());
-//	}
-//	else
-//	{
-//		ROS_ERROR("Failed to create texture.");
-//	}
+	if(texture)
+	{
+		texture->addMessage(cv_ptr->toImageMsg());
+	}
+	else
+	{
+		ROS_ERROR("Failed to create texture.");
+	}
 
+}
+
+void SphereDisplay::reset()
+{
+//  Display::reset();
+//  clear();
 }
 
 }  // namespace rviz

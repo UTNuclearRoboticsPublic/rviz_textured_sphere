@@ -10,9 +10,15 @@
 #include <OGRE/OgreArchive.h>
 #include <OGRE/OgreFrustum.h>
 #include <OGRE/OgreMaterialManager.h>
+#include <OGRE/OgreMeshManager.h>
 #include <OGRE/OgreMovableObject.h>
 #include <OGRE/OgreSceneManager.h>
 #include <OGRE/OgreSceneNode.h>
+#include <OGRE/OgreHardwareVertexBuffer.h>
+#include <OGRE/OgreHardwareBufferManager.h>
+#include <OGRE/OgreMesh.h>
+#include <OGRE/OgreSubMesh.h>
+#include <OGRE/OgreAxisAlignedBox.h>
 //#include <OGRE/OgreHardwarePixelBuffer.h>
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/camera_common.h>
@@ -118,7 +124,7 @@ void SphereDisplay::createSphere()
 	//pass->setSceneBlending(Ogre::SBT_TRANSPARENT_ALPHA);
 	//pass->setSceneBlending(Ogre::SBT_REPLACE);
 	//pass->setSceneBlendOperation
-	sphere_material_->getTechnique(0)->getPass(0)->setCullingMode(Ogre::CULL_NONE);
+//	sphere_material_->getTechnique(0)->getPass(0)->setCullingMode(Ogre::CULL_NONE);
 	//		material->getTechnique(0)->getPass(0)->setPolygonMode(Ogre::PM_WIREFRAME);
 
 	// Create sphere node and and add mesh entity to the scene
@@ -131,12 +137,105 @@ void SphereDisplay::createSphere()
 	sphere_node_->rotate(r1*r2);
 
 	sphere_node_->setDirection(Ogre::Vector3(1,0,0));
-	sphere_node_->setScale(10,10,10);
-	Ogre::Entity* sphere_entity = scene_manager_->createEntity(entity_name, Ogre::SceneManager::PT_SPHERE);
+//	sphere_node_->setScale(1,1,1);
+	//Ogre::Entity* sphere_entity = scene_manager_->createEntity(entity_name, Ogre::SceneManager::PT_SPHERE);
+	Ogre::MeshPtr sphere_mesh = createSphereMesh("sphere_mesh", 10, 64, 64);
+	Ogre::Entity* sphere_entity = scene_manager_->createEntity(sphere_mesh);
 	sphere_entity->setMaterialName(material_name);
-	Ogre::Mesh* mesh = sphere_entity->getMesh();
-	//mesh->
 	sphere_node_->attachObject(sphere_entity);
+}
+
+
+Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, const double r, const unsigned int ring_cnt = 32, const unsigned int segment_cnt = 32)
+{
+	Ogre::MeshPtr mesh = Ogre::MeshManager::getSingleton().createManual(mesh_name, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
+	Ogre::SubMesh* sub_mesh = mesh -> createSubMesh();
+	mesh->sharedVertexData = new Ogre::VertexData();
+	Ogre::VertexData* vertex_data = mesh->sharedVertexData;
+
+	// Define vertex format
+	// Position, Normal, and UV texture coordinates
+	Ogre::VertexDeclaration* vertex_decl = vertex_data -> vertexDeclaration;
+	size_t cur_offset = 0;
+	vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT3, Ogre::VES_POSITION);
+	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT3);
+	vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT3, Ogre::VES_NORMAL);
+	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT3);
+	vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT2, Ogre::VES_TEXTURE_COORDINATES, 0);
+	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT2);
+
+	// Allocate vertex buffer
+	vertex_data -> vertexCount = (ring_cnt + 1) * (segment_cnt + 1);
+	Ogre::HardwareVertexBufferSharedPtr v_buf = Ogre::HardwareBufferManager::getSingleton().createVertexBuffer(vertex_decl->getVertexSize(0), vertex_data->vertexCount, Ogre::HardwareBuffer::HBU_STATIC_WRITE_ONLY, false);
+	Ogre::VertexBufferBinding* binding = vertex_data -> vertexBufferBinding;
+	binding -> setBinding(0,v_buf);
+	float* vertex = static_cast<float*>(v_buf -> lock(Ogre::HardwareBuffer::HBL_DISCARD));
+	
+	// Allocate index buffer
+	sub_mesh -> indexData -> indexCount = 6 * ring_cnt * (segment_cnt + 1);
+	sub_mesh -> indexData -> indexBuffer = Ogre::HardwareBufferManager::getSingleton().createIndexBuffer(
+			Ogre::HardwareIndexBuffer::IT_16BIT, 
+			sub_mesh -> indexData -> indexCount,
+			Ogre::HardwareBuffer::HBU_STATIC_WRITE_ONLY,
+			false);
+	Ogre::HardwareIndexBufferSharedPtr i_buf = sub_mesh -> indexData ->indexBuffer;
+	unsigned short* indices = static_cast<unsigned short*>(i_buf -> lock(Ogre::HardwareBuffer::HBL_DISCARD));
+
+	float delta_ring_angle = M_PI / ring_cnt;
+	float delta_segment_angle = 2 * M_PI / segment_cnt;
+	unsigned short vertex_index = 0;	
+
+	// For over the rings of the sphere
+	for(int ring = 0; ring <= ring_cnt; ring++)
+	{
+		float r0 = r * sinf(ring * delta_ring_angle);
+		float y0 = r * cosf(ring * delta_ring_angle);
+
+		// For over the segments of the sphere
+		for(int seg = 0; seg <= segment_cnt; seg++)
+		{
+			float x0 = r0 * sinf(seg * delta_segment_angle);
+			float z0 = r0 * cosf(seg * delta_segment_angle);
+
+			// Add vertex pos
+			*vertex++ = x0;
+			*vertex++ = y0;
+			*vertex++ = z0;
+
+			// Add vertex normal (pointing inwards)
+			Ogre::Vector3 normal = -Ogre::Vector3(x0, y0, z0).normalisedCopy();
+			*vertex++ = normal.x;
+			*vertex++ = normal.y;
+			*vertex++ = normal.z;
+
+			// Add vertex uv coordinate
+			*vertex++ = (float) seg / (float) segment_cnt;
+			*vertex++ = (float) ring / (float) ring_cnt;
+
+			if(ring != ring_cnt)	
+			{
+				*indices++ = vertex_index + segment_cnt + 1;
+				*indices++ = vertex_index + segment_cnt;
+				*indices++ = vertex_index;               
+				*indices++ = vertex_index + 1;
+				*indices++ = vertex_index + segment_cnt + 1;
+				*indices++ = vertex_index;
+				vertex_index++;
+			}
+
+		}
+	}
+
+	// Unlock buffers
+	v_buf -> unlock();
+	i_buf -> unlock();
+
+	sub_mesh -> useSharedVertices = true;
+	mesh -> _setBounds(Ogre::AxisAlignedBox(Ogre::Vector3(-r, -r, -r), Ogre::Vector3(r, r, r)), false);
+	mesh -> _setBoundingSphereRadius(r);
+	mesh -> load();
+
+	return mesh;
 }
 
 

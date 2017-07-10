@@ -7,7 +7,6 @@ Panels:
         - /Global Options1
         - /SphereDisplay1
         - /RobotModel1
-        - /TF1
         - /TF1/Frames1
         - /OSVR Plugin for RViz1
         - /OSVR Plugin for RViz1/Offset1
@@ -348,8 +347,6 @@ Visualization Manager:
           Value: false
         right_ur5_wrist_3_link:
           Value: false
-        rviz_plugin_osvr/head:
-          Value: false
         top_chassis_link:
           Value: false
         user_rail_link:
@@ -394,8 +391,6 @@ Visualization Manager:
                               {}
             floorplane_link:
               {}
-            rviz_plugin_osvr/head:
-              {}
           front_bumper_link:
             {}
           front_left_wheel_link:
@@ -421,7 +416,7 @@ Visualization Manager:
     - Class: OSVR Plugin for RViz
       Enabled: true
       Follow RViz camera: false
-      Fullscreen: true
+      Fullscreen: false
       Name: OSVR Plugin for RViz
       OSVR tf frame: /rviz_plugin_osvr/head
       Offset:
@@ -460,7 +455,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 4.93749905
+      Distance: 5.21828556
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1

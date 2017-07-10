@@ -33,6 +33,7 @@
 #ifndef Q_MOC_RUN
 
 #include <OGRE/OgreEntity.h>
+#include <OGRE/OgreMesh.h>
 #include <OGRE/OgreManualObject.h>
 #include <OGRE/OgreRenderQueueListener.h>
 #include <OGRE/OgreRenderSystem.h>
@@ -114,6 +115,7 @@ private:
   void updateFrontCameraImage(const sensor_msgs::Image::ConstPtr& image);
   void updateRearCameraImage(const sensor_msgs::Image::ConstPtr& image);
   void createSphere();
+  Ogre::MeshPtr createSphereMesh(const std::string& mesh_name, const double r, const unsigned int ring_cnt, const unsigned int segment_cnt);
   void imageToTexture(ROSImageTexture*& texture, const sensor_msgs::Image::ConstPtr& msg);
   void updateTexture(ROSImageTexture*& texture);
   void clearStates();

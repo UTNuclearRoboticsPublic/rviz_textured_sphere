@@ -1,0 +1,29 @@
+material rviz_textured_sphere_material
+{
+	technique
+	{
+		pass
+		{
+			vertex_program_ref rviz_textured_sphere_vert {}
+			fragment_program_ref rviz_textured_sphere_frag {}
+			
+			//Set texture unit state for front camera
+			texture_unit RT
+			{
+				tex_coord_set 0
+				tex_address_mode border
+				tex_border_colour 1 0 0
+				filtering linear linear linear
+			}
+
+			//Set texture unit state for front camera
+			texture_unit RT
+			{
+				tex_coord_set 1
+				tex_address_mode border
+				tex_border_colour 1 0 0
+				filtering linear linear linear
+			}
+		}
+	}
+}

@@ -174,6 +174,8 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT3);
 	vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT2, Ogre::VES_TEXTURE_COORDINATES, 0);
 	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT2);
+	vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT2, Ogre::VES_TEXTURE_COORDINATES, 0);
+	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT2);
 
 	// Allocate vertex buffer
 	vertex_data -> vertexCount = (ring_cnt + 1) * (segment_cnt + 1);
@@ -222,6 +224,8 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 			// Add vertex uv coordinate
 			//*vertex++ = (float) seg / (float) segment_cnt;
 			//*vertex++ = (float) ring / (float) ring_cnt;
+			*vertex++ = (float) seg / (float) segment_cnt;
+			*vertex++ = (float) ring / (float) ring_cnt;
 			*vertex++ = (float) seg / (float) segment_cnt;
 			*vertex++ = (float) ring / (float) ring_cnt;
 
@@ -377,6 +381,11 @@ void SphereDisplay::update(float wall_dt, float ros_dt)
 	if(sphere_node_)
 	{
 		sphere_node_->needUpdate();
+
+//		if(!sphere_material_.isNull())
+//		{
+//			ROS_INFO("%d", sphere_material_->getTechnique(0)->getPass(0)->getNumTextureUnitStates());
+//		}
 	}
 }
 
@@ -484,6 +493,7 @@ void SphereDisplay::imageToTexture(ROSImageTexture*& texture, const sensor_msgs:
 			return;
 		}
 
+		ROS_INFO("is_front_texture_ %d", is_front_texture);
 		// try to get apropriate unit state (0-front cam, 1-rear cam)
 		Ogre::TextureUnitState* unit_state = pass -> getTextureUnitState(is_front_texture ? 0 : 1 );
 		if (!unit_state)

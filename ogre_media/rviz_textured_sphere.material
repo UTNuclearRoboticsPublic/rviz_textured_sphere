@@ -8,21 +8,22 @@ material rviz_textured_sphere_material
 			fragment_program_ref rviz_textured_sphere_frag {}
 			
 			//Set texture unit state for front camera
-			texture_unit RT
+			texture_unit rviz_textured_sphere_front
 			{
-				tex_coord_set 0
+			//	tex_coord_set 0
 				tex_address_mode border
-				tex_border_colour 1 0 0
-				filtering linear linear linear
+				tex_border_colour 0 0 0 0
+			//	filtering linear linear linear
 			}
 
-			//Set texture unit state for front camera
-			texture_unit RT
+			//Set texture unit state for rear camera
+			texture_unit rviz_textured_sphere_rear
 			{
-				tex_coord_set 1
+			//	tex_coord_set 1
 				tex_address_mode border
-				tex_border_colour 1 0 0
-				filtering linear linear linear
+				tex_border_colour 0 0 0 0
+			//	filtering linear linear linear
+			//	alpha_op_ex modulate src_texture src_manual 0.5
 			}
 		}
 	}

@@ -174,7 +174,7 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT3);
 	vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT2, Ogre::VES_TEXTURE_COORDINATES, 0);
 	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT2);
-	vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT2, Ogre::VES_TEXTURE_COORDINATES, 0);
+	vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT2, Ogre::VES_TEXTURE_COORDINATES, 1);
 	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT2);
 
 	// Allocate vertex buffer
@@ -224,9 +224,9 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 			// Add vertex uv coordinate
 			//*vertex++ = (float) seg / (float) segment_cnt;
 			//*vertex++ = (float) ring / (float) ring_cnt;
-			*vertex++ = (float) seg / (float) segment_cnt;
+			*vertex++ = (float) seg / (float) segment_cnt * 2 - 1;
 			*vertex++ = (float) ring / (float) ring_cnt;
-			*vertex++ = (float) seg / (float) segment_cnt;
+			*vertex++ = (float) seg / (float) segment_cnt * 2;
 			*vertex++ = (float) ring / (float) ring_cnt;
 
 			// Add faces (normal inwards)
@@ -493,7 +493,6 @@ void SphereDisplay::imageToTexture(ROSImageTexture*& texture, const sensor_msgs:
 			return;
 		}
 
-		ROS_INFO("is_front_texture_ %d", is_front_texture);
 		// try to get apropriate unit state (0-front cam, 1-rear cam)
 		Ogre::TextureUnitState* unit_state = pass -> getTextureUnitState(is_front_texture ? 0 : 1 );
 		if (!unit_state)
@@ -503,6 +502,8 @@ void SphereDisplay::imageToTexture(ROSImageTexture*& texture, const sensor_msgs:
 		}
 
 		unit_state -> setTexture(texture -> getTexture());
+		pass->getFragmentProgram()->escalateLoading();
+		pass->getFragmentProgram()->reload();
 
 	}
 }

@@ -5,11 +5,16 @@ uniform sampler2D texRear;
 varying vec2 texCoordFront;
 varying vec2 texCoordRear;
 
+
 void main()
 {
 	vec4 colFront = texture2D(texFront, texCoordFront);
+	gl_FragColor = colFront;
+
+
 	vec4 colRear = texture2D(texRear, texCoordRear);
-	//colFront = vec4(0,0,0,0.5);
-	//colRear = vec4(0,0,0,0.5);
-	gl_FragColor = (vec4(colFront.xyz, 1)*1 + 1*vec4(colRear.xyz, 1));
+//	gl_FragColor = colFront+colRear;
+	gl_FragColor = colFront;
+//(colFront + colRear)/2.0;
+	
 }

@@ -99,6 +99,7 @@ private Q_SLOTS:
   void updateMeshProperties();
   void onImageTopicChanged();
   void onDebugValueChanged();
+  void onMeshParamChanged();
 
 protected:
   // overrides from Display

@@ -37,6 +37,7 @@
 #include <rviz/visualization_manager.h>
 #include <rviz/image/ros_image_texture.h>
 #include <rviz_textured_sphere/sphere_display.h>
+#include <angles/angles.h>
 #include <sensor_msgs/image_encodings.h>
 #include <string>
 #include <vector>
@@ -74,13 +75,13 @@ SphereDisplay::SphereDisplay() :
       "Position the sphere relative to this frame.",
       this, 0, true);
 
-  fov_front_property_ = new FloatProperty("FOV front", 190.0,
-      "Front camera field of view", this);
+  fov_front_property_ = new FloatProperty("FOV front", 235.0,
+      "Front camera field of view", this, SLOT(onMeshParamChanged()));
 
-  fov_rear_property_= new FloatProperty("FOV rear", 190.0,
-      "Rear camera field of view", this);
+  fov_rear_property_= new FloatProperty("FOV rear", 235.0,
+      "Rear camera field of view", this, SLOT(onMeshParamChanged()));
 
-  debug_property_= new FloatProperty("Debug value", 1.0f,
+  debug_property_= new FloatProperty("Debug value", 0.0f,
 	  "A value for debugging", this, SLOT(onDebugValueChanged()));
 
   // Create and load a separate resourcegroup
@@ -116,7 +117,7 @@ void SphereDisplay::createSphere()
 	Ogre::String node_name(ROS_PACKAGE_NAME "_node");
 	Ogre::String material_name(ROS_PACKAGE_NAME "_material");
 
-	if(scene_manager_->hasSceneNode("sphere_display_node"))
+	if(scene_manager_->hasSceneNode(node_name))
 	{
 		return; 
 	}
@@ -165,7 +166,7 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 	Ogre::VertexData* vertex_data = mesh->sharedVertexData;
 
 	// Define vertex format
-	// Position, Normal, and UV texture coordinates
+	// Position, Normal, and UV coord0, UV coord1
 	Ogre::VertexDeclaration* vertex_decl = vertex_data -> vertexDeclaration;
 	size_t cur_offset = 0;
 	vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT3, Ogre::VES_POSITION);
@@ -221,13 +222,76 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 			*vertex++ = normal.y;
 			*vertex++ = normal.z;
 
-			// Add vertex uv coordinate
-			//*vertex++ = (float) seg / (float) segment_cnt;
-			//*vertex++ = (float) ring / (float) ring_cnt;
-			*vertex++ = (float) seg / (float) segment_cnt * 2 - 1;
-			*vertex++ = (float) ring / (float) ring_cnt;
-			*vertex++ = (float) seg / (float) segment_cnt * 2;
-			*vertex++ = (float) ring / (float) ring_cnt;
+			// Add uv coordinates
+			float lens_fov = angles::from_degrees(180);
+			float cropped_fov = angles::from_degrees(180);
+			float scaling_factor = M_PI/lens_fov;
+
+			// Coord 0 [-1...1]
+			float view_center_front = M_PI;
+			float view_center_rear = 2*M_PI;
+			float v_angle = ring*delta_ring_angle;
+			float v_arg = (v_angle+lens_fov/2-M_PI_2)*scaling_factor;
+			float uv_r0 = sinf(v_arg);
+			float v_front = cosf(v_arg);
+			float v_rear = cosf(v_arg);
+			float u_angle = seg*delta_segment_angle;
+			float u_arg_front = (u_angle+lens_fov/2 - view_center_front)*scaling_factor;
+			float u_arg_rear = (u_angle+lens_fov/2 - view_center_rear)*scaling_factor;
+			float u_front = uv_r0 * cosf(u_arg_front);
+			float u_rear = uv_r0 * cosf(u_arg_rear);
+
+			//scale and scroll textures so that their centers will align with the centers of half spheres
+			u_front = u_front * 0.5 * debug_property_->getFloat() + 0.5;
+			v_front = v_front * 0.5  * debug_property_->getFloat()+ 0.5;
+			u_rear = u_rear * 0.5 * debug_property_->getFloat() + 0.5;
+			v_rear = v_rear * 0.5  * debug_property_->getFloat()+ 0.5;
+			
+			if(u_angle <= view_center_front-cropped_fov/2 || u_angle >= view_center_front+cropped_fov/2)
+			{
+				//map out of interest uv coordinates to a circle out of texture boundaries
+				u_front = u_front * 0.5+0.5;
+				v_front = v_front * 0.5+0.5;
+				Ogre::Vector2 uv_front = Ogre::Vector2(u_front,v_front);
+				uv_front.normalise();
+				uv_front = uv_front*10;
+				u_front = uv_front.x;
+				v_front = uv_front.y;
+
+				if (u_front==0 && v_front==0)
+				{
+					u_front=10;
+					v_front=10;
+				}
+			}
+
+			if(u_angle <= view_center_rear-cropped_fov/2 || u_angle >= view_center_rear+cropped_fov/2)
+			{
+				//map out of interest uv coordinates to a circle out of texture boundaries
+				u_rear = u_rear * 0.5+0.5;
+				v_rear = v_rear * 0.5+0.5;
+				Ogre::Vector2 uv_rear = Ogre::Vector2(u_rear,v_rear);
+				uv_rear.normalise();
+				uv_rear = uv_rear*10;
+				u_rear = uv_rear.x;
+				v_rear = uv_rear.y;
+
+				if (u_rear==0 && v_rear==0)
+				{
+					u_rear=10;
+					v_rear=10;
+				}
+			}
+
+			//Coord 0
+			*vertex++ = u_front;
+			*vertex++ = 1-v_front;
+
+			//Coord 1
+			*vertex++ = u_rear;
+			*vertex++ = 1-v_rear;
+
+//				ROS_INFO("Uarg %f, Varg %f", angles::to_degrees(u_arg), angles::to_degrees(v_arg));
 
 			// Add faces (normal inwards)
 			if(ring != ring_cnt)	
@@ -283,11 +347,18 @@ void SphereDisplay::onImageTopicChanged()
 void SphereDisplay::onDebugValueChanged()
 {
 	ROS_WARN("Value changed");
-	if(!sphere_material_.isNull())
-	{
-	//	sphere_material_->getTechnique(0)->getPass(0)->removeAllTextureUnitStates();
-	}
+	onMeshParamChanged();
 }
+
+void SphereDisplay::onMeshParamChanged()
+{
+	Ogre::String node_name(ROS_PACKAGE_NAME "_node");
+	Ogre::String mesh_name(ROS_PACKAGE_NAME "_mesh");
+	scene_manager_->getRootSceneNode()->removeAndDestroyChild(node_name);
+	Ogre::MeshManager::getSingleton().remove(mesh_name);
+	createSphere();
+}
+
 
 void SphereDisplay::subscribe()
 {

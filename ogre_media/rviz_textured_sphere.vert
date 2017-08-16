@@ -1,7 +1,7 @@
 #version 120
 
-//uniform sampler2D texFront;
-//uniform sampler2D texRear;
+//uniform sampler2D Texture0;
+//uniform sampler2D Texture1;
 //uniform vec4 gl_MultiTexCoord0;
 //uniform vec4 gl_MultiTexCoord1;
 

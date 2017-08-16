@@ -4,8 +4,8 @@ material rviz_textured_sphere_material
 	{
 		pass
 		{
-			vertex_program_ref rviz_textured_sphere_vert {}
-			fragment_program_ref rviz_textured_sphere_frag {}
+			//vertex_program_ref rviz_textured_sphere_vert {}
+			//fragment_program_ref rviz_textured_sphere_frag {}
 
 			//Set texture unit state for front camera
 			texture_unit tex_unit_front
@@ -16,6 +16,8 @@ material rviz_textured_sphere_material
 				tex_address_mode border
 				tex_border_colour 0.0 0.0 0.0 0.0
 				//filtering linear linear linear
+				//colour_op_ex blend_diffuse_colour src_manual src_texture 0.0 1.0 0.0 1.0
+colour_op replace
 			}
 
 
@@ -28,8 +30,24 @@ material rviz_textured_sphere_material
 				tex_address_mode border
 				tex_border_colour 0.0 0.0 0 0.0
 				//filtering linear linear linear
-				//colour_op replace 
+			//	colour_op alpha_blend 
+				colour_op_ex blend_diffuse_alpha src_texture src_current
 			}
+
+//			texture_unit test1
+//			{
+//				tex_coord_set 0
+//				texture test1.jpg
+//colour_op add
+//			}
+//
+//			texture_unit test2
+//			{
+//				tex_coord_set 1
+//				texture test2.jpg
+//
+//colour_op add
+//			}
 		}
 	}
 }

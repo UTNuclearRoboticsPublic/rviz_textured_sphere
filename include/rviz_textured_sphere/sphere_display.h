@@ -126,6 +126,7 @@ private:
   TfFrameProperty* tf_frame_property_;
   FloatProperty* fov_front_property_;
   FloatProperty* fov_rear_property_;
+  FloatProperty* blend_angle_property_;
   FloatProperty* debug_property_;
 
   ros::Subscriber image_sub_front_;

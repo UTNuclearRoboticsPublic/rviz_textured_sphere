@@ -81,6 +81,10 @@ SphereDisplay::SphereDisplay() :
   fov_rear_property_= new FloatProperty("FOV rear", 235.0,
       "Rear camera field of view", this, SLOT(onMeshParamChanged()));
 
+  blend_angle_property_= new FloatProperty("Blend angle", 0,
+      "Specifies the size of a region, where two images overlap and are blended together", 
+	  this, SLOT(onMeshParamChanged()));
+
   debug_property_= new FloatProperty("Debug value", 0.0f,
 	  "A value for debugging", this, SLOT(onDebugValueChanged()));
 
@@ -88,6 +92,19 @@ SphereDisplay::SphereDisplay() :
   std::string path_str = ros::package::getPath(ROS_PACKAGE_NAME);
   Ogre::ResourceGroupManager::getSingleton().addResourceLocation( path_str + "/ogre_media", "FileSystem", ROS_PACKAGE_NAME  );
   Ogre::ResourceGroupManager::getSingleton().initialiseResourceGroup(ROS_PACKAGE_NAME);
+
+  //try to create texture_unit_state
+  texture_front_ = new ROSImageTexture();
+  texture_rear_ = new ROSImageTexture();
+  if(!texture_front_ || !texture_rear_)
+  {
+	  ROS_ERROR("Failed to create ROSImageTextures.");
+  }
+  else
+  {
+	  ROS_INFO("Created new texture: %s", texture_front_->getTexture()->getName().c_str());
+	  ROS_INFO("Created new texture: %s", texture_rear_->getTexture()->getName().c_str());
+  }
 }
 
 SphereDisplay::~SphereDisplay()
@@ -100,6 +117,7 @@ SphereDisplay::~SphereDisplay()
   delete tf_frame_property_;
   delete fov_front_property_;
   delete fov_rear_property_;
+  delete blend_angle_property_;
   delete debug_property_;
 }
 
@@ -148,7 +166,7 @@ void SphereDisplay::createSphere()
 	    r2.FromAngleAxis(Ogre::Radian(-M_PI*0.5), Ogre::Vector3::UNIT_Y);
 	sphere_node_->rotate(r1*r2);
 
-	sphere_node_->setDirection(Ogre::Vector3(1,0,0));
+	sphere_node_->setDirection(Ogre::Vector3(0,1,0));
 //	sphere_node_->setScale(1,1,1);
 	//Ogre::Entity* sphere_entity = scene_manager_->createEntity(entity_name, Ogre::SceneManager::PT_SPHERE);
 	Ogre::MeshPtr sphere_mesh = createSphereMesh(ROS_PACKAGE_NAME "_mesh", 10, 64, 64);
@@ -177,6 +195,11 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT2);
 	vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT2, Ogre::VES_TEXTURE_COORDINATES, 1);
 	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT2);
+	vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT4, Ogre::VES_DIFFUSE);
+	cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT4);
+	//vertex_decl -> addElement(0, cur_offset, Ogre::VET_FLOAT4, Ogre::VES_SPECULAR);
+	//cur_offset += Ogre::VertexElement::getTypeSize(Ogre::VET_FLOAT4);
+	
 
 	// Allocate vertex buffer
 	vertex_data -> vertexCount = (ring_cnt + 1) * (segment_cnt + 1);
@@ -223,38 +246,32 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 			*vertex++ = normal.z;
 
 			// Add uv coordinates
-			float lens_fov = angles::from_degrees(180);
-			float cropped_fov = angles::from_degrees(180);
-			float scaling_factor = M_PI/lens_fov;
+			float front_lens_fov = angles::from_degrees(fov_front_property_->getFloat());
+			float rear_lens_fov = angles::from_degrees(fov_rear_property_->getFloat());
+			float blend_angle = angles::from_degrees(blend_angle_property_->getFloat());
 
-			// Coord 0 [-1...1]
-			float view_center_front = M_PI;
-			float view_center_rear = 2*M_PI;
 			float v_angle = ring*delta_ring_angle;
-			float v_arg = (v_angle+lens_fov/2-M_PI_2)*scaling_factor;
-			float uv_r0 = sinf(v_arg);
-			float v_front = cosf(v_arg);
-			float v_rear = cosf(v_arg);
 			float u_angle = seg*delta_segment_angle;
-			float u_arg_front = (u_angle+lens_fov/2 - view_center_front)*scaling_factor;
-			float u_arg_rear = (u_angle+lens_fov/2 - view_center_rear)*scaling_factor;
-			float u_front = uv_r0 * cosf(u_arg_front);
-			float u_rear = uv_r0 * cosf(u_arg_rear);
+			float uv_r0 = sinf(v_angle);
+
+			uv_r0 = (float)ring / (float)ring_cnt*2;
 
 			//scale and scroll textures so that their centers will align with the centers of half spheres
-			u_front = u_front * 0.5 * debug_property_->getFloat() + 0.5;
-			v_front = v_front * 0.5  * debug_property_->getFloat()+ 0.5;
-			u_rear = u_rear * 0.5 * debug_property_->getFloat() + 0.5;
-			v_rear = v_rear * 0.5  * debug_property_->getFloat()+ 0.5;
+			float scale_front = M_PI / front_lens_fov;
+			float v_front = uv_r0*cos(u_angle)*0.5*scale_front+0.5;
+			float u_front = -uv_r0*sin(u_angle)*0.5*scale_front+0.5;
+
+			float scale_rear = M_PI / rear_lens_fov;
+			float v_rear = (2-uv_r0)*cos(u_angle)*0.5*scale_rear+0.5;
+			float u_rear = (2-uv_r0)*sin(u_angle)*0.5*scale_rear+0.5+debug_property_->getFloat();
+
 			
-			if(u_angle <= view_center_front-cropped_fov/2 || u_angle >= view_center_front+cropped_fov/2)
+			// create mask for front image
+			if(v_angle > M_PI_2 + blend_angle/2)
 			{
-				//map out of interest uv coordinates to a circle out of texture boundaries
-				u_front = u_front * 0.5+0.5;
-				v_front = v_front * 0.5+0.5;
 				Ogre::Vector2 uv_front = Ogre::Vector2(u_front,v_front);
 				uv_front.normalise();
-				uv_front = uv_front*10;
+				uv_front = uv_front*1000;
 				u_front = uv_front.x;
 				v_front = uv_front.y;
 
@@ -265,14 +282,13 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 				}
 			}
 
-			if(u_angle <= view_center_rear-cropped_fov/2 || u_angle >= view_center_rear+cropped_fov/2)
+			//create mask for rear image
+			if(v_angle < M_PI_2 - blend_angle/2)
 			{
 				//map out of interest uv coordinates to a circle out of texture boundaries
-				u_rear = u_rear * 0.5+0.5;
-				v_rear = v_rear * 0.5+0.5;
 				Ogre::Vector2 uv_rear = Ogre::Vector2(u_rear,v_rear);
 				uv_rear.normalise();
-				uv_rear = uv_rear*10;
+				uv_rear = uv_rear*1000;
 				u_rear = uv_rear.x;
 				v_rear = uv_rear.y;
 
@@ -282,16 +298,34 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 					v_rear=10;
 				}
 			}
+			//ROS_INFO("angle:%f, Varg %f, Uarg %f Varg %f, Uarg %f", v_angle, v_front, u_front, v_rear, u_rear);
 
-			//Coord 0
+			//TexCoord 0
 			*vertex++ = u_front;
-			*vertex++ = 1-v_front;
+			*vertex++ = v_front;
 
-			//Coord 1
+			//TexCoord 1
 			*vertex++ = u_rear;
-			*vertex++ = 1-v_rear;
+			*vertex++ = v_rear;
 
-//				ROS_INFO("Uarg %f, Varg %f", angles::to_degrees(u_arg), angles::to_degrees(v_arg));
+			//Diffuse for blending
+			float blend_alpha = (v_angle-M_PI_2+blend_angle/2)/blend_angle;
+			if(blend_alpha<0) blend_alpha = 0;
+			if(blend_alpha>1) blend_alpha = 1;
+			
+//			blend_alpha = debug_property_->getFloat();
+			*vertex++ = blend_alpha; // r
+			*vertex++ = blend_alpha; // g
+			*vertex++ = blend_alpha; // b
+			*vertex++ =	blend_alpha; // a
+			//
+			//Diffuse for blending
+		//	*vertex++ = 1.0f; // r
+		//	*vertex++ = 1.0f; // g
+		//	*vertex++ = 1.0f; // b
+		//	*vertex++ =	alpha_rear; // a
+			
+
 
 			// Add faces (normal inwards)
 			if(ring != ring_cnt)	
@@ -323,14 +357,14 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 
 void SphereDisplay::updateFrontCameraImage(const sensor_msgs::Image::ConstPtr& image)
 {
-	//ROS_WARN("New FRONT image arrived");
+	//ROS_INFO("New FRONT image arrived");
 	cur_image_front_ = image;
 	new_front_image_arrived_ = true;
 }
 
 void SphereDisplay::updateRearCameraImage(const sensor_msgs::Image::ConstPtr& image)
 {
-	//ROS_WARN("New REAR image arrived");
+	//ROS_INFO("New REAR image arrived");
 	cur_image_rear_ = image;
 	new_rear_image_arrived_ = true;
 }
@@ -338,16 +372,31 @@ void SphereDisplay::updateRearCameraImage(const sensor_msgs::Image::ConstPtr& im
 
 void SphereDisplay::onImageTopicChanged()
 {
-	//ROS_INFO("onImageTopicChanged()");
-
 	unsubscribe();
 	subscribe();
 }
 
 void SphereDisplay::onDebugValueChanged()
 {
-	ROS_WARN("Value changed");
 	onMeshParamChanged();
+	if(sphere_material_.isNull())
+	{
+		ROS_ERROR("imageToTexture(): sphere_material_ is NULL.");
+		return;
+	}
+
+	Ogre::Pass* pass = sphere_material_ -> getTechnique(0) -> getPass(0);
+	if (!pass)
+	{
+		ROS_ERROR("imageToTexture(): pass is NULL.");
+		return;
+	}
+
+	if (pass->getNumTextureUnitStates()<2)
+	{
+		ROS_ERROR("imageToTexture(): Number of texture unit states is less than 2.");
+		return;
+	}
 }
 
 void SphereDisplay::onMeshParamChanged()
@@ -362,7 +411,7 @@ void SphereDisplay::onMeshParamChanged()
 
 void SphereDisplay::subscribe()
 {
-	//ROS_INFO("subscribe()");
+	// Subscribe to receive front and rear camera images
 	if (!isEnabled())
 	{
 		return;
@@ -375,12 +424,10 @@ void SphereDisplay::subscribe()
 			image_sub_front_ = nh_.subscribe(image_topic_front_property_->getTopicStd(),
 					1, &SphereDisplay::updateFrontCameraImage, this);
 			setStatus(StatusProperty::Ok, "Front camera image", "OK");
-			//ROS_WARN("SUBS FRONT OK");
 		}
 		catch (ros::Exception& e)
 		{
 			setStatus(StatusProperty::Error, "Front camera image", QString("Error subscribing: ") + e.what());
-			ROS_ERROR("SUBS FRONT FAILED");
 		}
 	}
 
@@ -390,18 +437,15 @@ void SphereDisplay::subscribe()
 		{
 			image_sub_rear_ = nh_.subscribe(image_topic_rear_property_->getTopicStd(),
 					1, &SphereDisplay::updateRearCameraImage, this);
-			//ROS_WARN("SUBS REAR OK");
 		} catch (ros::Exception& e)
 		{
 			setStatus(StatusProperty::Error, "Rear camera image", QString("Error subscribing: ") + e.what());
-			ROS_ERROR("SUBS REAR FAILED");
 		}
 	}
 }
 
 void SphereDisplay::unsubscribe()
 {
-	
 	//ROS_INFO("unsubscribe()");
 	image_sub_front_.shutdown();
 	image_sub_rear_.shutdown();
@@ -410,8 +454,6 @@ void SphereDisplay::unsubscribe()
 
 void SphereDisplay::onEnable()
 {
-	//ROS_INFO("onEnable()");
-
 	subscribe();
 }
 
@@ -426,16 +468,11 @@ void SphereDisplay::preRenderTargetUpdate(const Ogre::RenderTargetEvent& evt)
 
 void SphereDisplay::update(float wall_dt, float ros_dt)
 {
-	//ROS_INFO("Update: new front image, %s", new_front_image_arrived_ ? "True":"False");
-	//ROS_INFO("Update: new rear image, %s", new_rear_image_arrived_ ? "True":"False");
 	// Update front texture
 	if(new_front_image_arrived_)
 	{
-		//ROS_INFO("1update front texture %p", texture_front_);
 		imageToTexture(texture_front_, cur_image_front_);
-		//ROS_INFO("2update front texture %p", texture_front_);
 		updateTexture(texture_front_);
-		//ROS_INFO("3update front texture %p", texture_front_);
 		new_front_image_arrived_ = false;
 	}	
 
@@ -480,109 +517,71 @@ void SphereDisplay::updateTexture(ROSImageTexture*& texture)
 		ROS_ERROR("SphereDisplay::updateTexture[%s]: UnsupportedImageEncoding: %s", texture_name.c_str(), e.what());
 		return;
 	}
-	// RViz ROSImageTexture successfully updated
-
-
-//	if(sphere_material_.isNull())
-//	{
-//		ROS_ERROR("SphereDisplay::updateTexture[%s]: sphere_material_ is NULL!", texture_name.c_str());
-//		return;
-//	}
-
-	// Create Ogre textureUnitState if one does not exist already.
-//	Ogre::Pass* pass = sphere_material_->getTechnique(0)->getPass(0);
-//	//	ROS_ERROR("%s numStates() %d",texture_name.c_str(),pass->getNumTextureUnitStates());
-//	if(!pass->getTextureUnitState(texture_name))
-//	{
-//		ROS_ERROR("SphereDisplay::updateTexture[%s]: texture_unit_state is NULL!", texture_name.c_str());
-//		return;
-//	}
-	//	Ogre::TextureUnitState* unit_state = pass->getTextureUnitState(0);
-	//	unit_state->setName(texture_name);
-	//	unit_state->setTexture(texture->getTexture());
-		//unit_state->setTextureAddressingMode(Ogre::TextureUnitState::TAM_BORDER);
-		//unit_state->setTextureBorderColour(Ogre::ColourValue(0,0,0,0));
-		//unit_state->setTextureScale(debug_property_->getFloat(),1);
-		//unit_state->setTextureScroll(0.5,0);
-//
-//		ROS_INFO("CREATED TEXTURE UNIT STATE: %s",unit_state->getName().c_str());
-//		ROS_INFO("ID: %d",pass->getTextureUnitStateIndex(unit_state));
-//		if(pass->getTextureUnitStateIndex(unit_state)==1)
-//		{
-//			unit_state->setTextureScroll(-0.5,0);
-//			ROS_INFO("UNIT STATE: %s",unit_state->getName().c_str());
-//			unit_state->setColourOperation(Ogre::LBO_ALPHA_BLEND);
-//		}
 }
 
 void SphereDisplay::imageToTexture(ROSImageTexture*& texture, const sensor_msgs::Image::ConstPtr& msg)
 {
 	cv_bridge::CvImagePtr cv_ptr;
 
-	// simply converting every image to RGBA
+	// convert every image to RGBA
 	try
 	{
 		cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::RGBA8);
 	}
 	catch (cv_bridge::Exception& e)
 	{
-		ROS_ERROR("SphereDisplay: cv_bridge exception: %s", e.what());
+		ROS_ERROR("imageToTexture: cv_bridge exception: %s", e.what());
 		return;
 	}
 
-	// add completely white transparent border to the image so that it won't replicate colored pixels all over the mesh
-	// cv::Scalar value(255, 255, 255, 0);
-	//cv::copyMakeBorder(cv_ptr->image, cv_ptr->image, 1, 1, 1, 1, cv::BORDER_CONSTANT, value);
-	//cv::flip(cv_ptr->image, cv_ptr->image, -1);
+	if (!texture)
+	{
+		ROS_ERROR("imageToTexture: Texture is NULL:");
+		return;
+	}
+
+	// add arrived image to ROSImageTexture
+	texture->addMessage(cv_ptr->toImageMsg());
+
+	// check if material and render pass are loaded and 
+	// assign texture to ogre's texture unit state
+	if(sphere_material_.isNull())
+	{
+		ROS_ERROR("imageToTexture(): sphere_material_ is NULL.");
+		return;
+	}
+
+	Ogre::Pass* pass = sphere_material_ -> getTechnique(0) -> getPass(0);
+	if (!pass)
+	{
+		ROS_ERROR("imageToTexture(): pass is NULL.");
+		return;
+	}
+
+	if (pass->getNumTextureUnitStates()<2)
+	{
+		ROS_ERROR("imageToTexture(): Number of texture unit states is less than 2.");
+		return;
+	}
+
 	bool is_front_texture = (texture == texture_front_);
 
-	if (texture)
+	//get unit state (0-front cam, 1-rear cam)
+	int	unit_state_idx = is_front_texture ? 0 : 1; 
+	Ogre::TextureUnitState* unit_state = pass -> getTextureUnitState(unit_state_idx);
+	if (!unit_state)
 	{
-		texture->addMessage(cv_ptr->toImageMsg());
+		ROS_ERROR("Failed to getTextureUnitState(%d).", unit_state_idx);
+		return;
 	}
-	else
-	{
-		//no texture, try to create one and add to texture_unit_state
-		texture = new ROSImageTexture();
-		if(!texture)
-		{
-			ROS_ERROR("Failed to create new texture.");
-			return;
-		}
-		ROS_INFO("imageToTexture(): Created new texture: %s", texture->getTexture()->getName().c_str());
 
-		if(sphere_material_.isNull())
-		{
-			ROS_ERROR("imageToTexture(): sphere_material_ is NULL.");
-			return;
-		}
-
-		Ogre::Pass* pass = sphere_material_ -> getTechnique(0) -> getPass(0);
-		if (!pass)
-		{
-			ROS_ERROR("imageToTexture(): pass is NULL.");
-			return;
-		}
-
-		// try to get apropriate unit state (0-front cam, 1-rear cam)
-		Ogre::TextureUnitState* unit_state = pass -> getTextureUnitState(is_front_texture ? 0 : 1 );
-		if (!unit_state)
-		{
-			ROS_ERROR("Failed to get TextureUnitState.");
-			return;
-		}
-
-		unit_state -> setTexture(texture -> getTexture());
-		pass->getFragmentProgram()->escalateLoading();
-		pass->getFragmentProgram()->reload();
-
-	}
+	unit_state -> setTexture(texture -> getTexture());
 }
 
 void SphereDisplay::reset()
 {
-//  Display::reset();
-//  clear();
+	//  Display::reset();
+	//  clear();
 }
 
 }  // namespace rviz

@@ -98,7 +98,6 @@ public:
 private Q_SLOTS:
   void updateMeshProperties();
   void onImageTopicChanged();
-  void onDebugValueChanged();
   void onMeshParamChanged();
 
 protected:
@@ -118,16 +117,14 @@ private:
   void createSphere();
   Ogre::MeshPtr createSphereMesh(const std::string& mesh_name, const double r, const unsigned int ring_cnt, const unsigned int segment_cnt);
   void imageToTexture(ROSImageTexture*& texture, const sensor_msgs::Image::ConstPtr& msg);
-  void updateTexture(ROSImageTexture*& texture);
   void clearStates();
 
   RosTopicProperty* image_topic_front_property_;
   RosTopicProperty* image_topic_rear_property_;
-  TfFrameProperty* tf_frame_property_;
+  TfFrameProperty* ref_frame_property_;
   FloatProperty* fov_front_property_;
   FloatProperty* fov_rear_property_;
   FloatProperty* blend_angle_property_;
-  FloatProperty* debug_property_;
 
   ros::Subscriber image_sub_front_;
   ros::Subscriber image_sub_rear_;

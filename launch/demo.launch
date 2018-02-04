@@ -5,67 +5,8 @@
       args="-l -d $(find rviz_textured_sphere)/rviz_cfg/rviz_textured_sphere.rviz"
       output="screen"/>
 
-  <!--node pkg="tf" type="static_transform_publisher" name="quad_broadcaster"
-      args="0.1 -0.1 -0.5 0.01 0.7 0.1 map quad 30" /-->
+  <arg name="pub_demo_textures" default="false"/>                                                                  
 
-  <!--group ns="camera1">
-  <node pkg="tf" type="static_transform_publisher" name="camera_broadcaster"
-      args="0.1 0.1 -1.5 0 0 0 1 map camera1 30" />
-  <node name="camera_info" pkg="rostopic" type="rostopic"
-      args="pub camera_info sensor_msgs/CameraInfo
-     '{header: {seq: 0, stamp: {secs: 0, nsecs: 0}, frame_id: 'camera1'},
-      height: 480, width: 640, distortion_model: 'plumb_bob',
-      D: [0],
-      K: [500.0, 0.0, 320, 0.0, 500.0, 240.0, 0.0, 0.0, 1.0],
-      R: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
-      P: [500.0, 0.0, 320, 0.0, 0.0, 500, 240, 0.0, 0.0, 0.0, 1.0, 0.0],
-      binning_x: 0, binning_y: 0,
-      roi: {x_offset: 0, y_offset: 0, height: 480, width: 640, do_rectify: false}}' -r 2"
-      output="screen"/>
-  </group-->
-   <include file="$(find video_stream_opencv)/launch/camera.launch" >
-   		<!-- node name and ros graph name -->
-	  	<arg name="camera_name" value="webcam1" />
-	  	<!-- means video device 0, /dev/video0 -->
-	  	<arg name="video_stream_provider" value="3" />
-	  	<!-- throttling the querying of frames to -->
-	  	<arg name="fps" value="15" />
-	  	<!-- setting frame_id -->
-	  	<arg name="frame_id" value="webcam_optical_frame_1" />
-	  	<!-- camera info loading, take care as it needs the "file:///" at the start , e.g.:
-	  	"file:///$(find your_camera_package)/config/your_camera.yaml" -->
-	  	<arg name="camera_info_url" value="" />
-	  	<!-- flip the image horizontally (mirror it) -->
-	  	<arg name="flip_horizontal" value="false" />
-	  	<!-- flip the image vertically -->
-	  	<arg name="flip_vertical" value="false" />
-		<!-- force width and height, 0 means no forcing -->
-	    <arg name="width" value="1440"/>
-	    <arg name="height" value="1440"/>
-	  	<!-- visualize on an image_view window the stream generated -->
-	  	<arg name="visualize" value="false" />
-  </include>
-   <include file="$(find video_stream_opencv)/launch/camera.launch" >
-   		<!-- node name and ros graph name -->
-	  	<arg name="camera_name" value="webcam2" />
-	  	<!-- means video device 0, /dev/video0 -->
-	  	<arg name="video_stream_provider" value="1" />
-	  	<!-- throttling the querying of frames to -->
-	  	<arg name="fps" value="15" />
-	  	<!-- setting frame_id -->
-	  	<arg name="frame_id" value="webcam_optical_frame_2" />
-	  	<!-- camera info loading, take care as it needs the "file:///" at the start , e.g.:
-	  	"file:///$(find your_camera_package)/config/your_camera.yaml" -->
-	  	<arg name="camera_info_url" value="" />
-	  	<!-- flip the image horizontally (mirror it) -->
-	  	<arg name="flip_horizontal" value="false" />
-	  	<!-- flip the image vertically -->
-	  	<arg name="flip_vertical" value="false" />
-		<!-- force width and height, 0 means no forcing -->
-	    <arg name="width" value="1440"/>
-	    <arg name="height" value="1440"/>
-	  	<!-- visualize on an image_view window the stream generated -->
-	  	<arg name="visualize" value="false" />
-  </include>
+  <node if="$(arg pub_demo_textures)" pkg="rosbag" type="play" name="play_360_video" args="-l $(find rviz_textured_sphere)/bag/demo_textures.bag" />
 
 </launch>

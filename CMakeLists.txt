@@ -22,6 +22,7 @@ endif()
 
 ## Avoid defining "emit", "slots", etc because they can conflict with boost signals.
 add_definitions(-DQT_NO_KEYWORDS)
+add_compile_options(-std=c++11)
 
 
 catkin_package()

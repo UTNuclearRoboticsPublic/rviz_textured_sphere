@@ -42,6 +42,11 @@
 #include <string>
 #include <vector>
 
+#include <pluginlib/class_loader.h>
+#include <image_transport/subscriber_plugin.h>
+#include <regex> 
+#include <QSignalMapper>
+
 namespace rviz
 {
 
@@ -63,44 +68,56 @@ SphereDisplay::SphereDisplay() :
 	new_front_image_arrived_(false),
 	new_rear_image_arrived_(false)
 {
-  image_topic_front_property_ = new RosTopicProperty("Front camera image", "",
+  image_topic_front_property_ = new RosTopicProperty(
+      "Front camera image", "",
       QString::fromStdString(ros::message_traits::datatype<sensor_msgs::Image>()),
-      "Image topic of the front camera to subscribe to.",
-      this, SLOT(onImageTopicChanged()));
-  image_topic_rear_property_ = new RosTopicProperty("Rear camera image", "",
+      "Image topic of the front camera to subscribe to.", this, SLOT(onImageTopicChanged()));
+
+  front_transport_property_ =
+      new EnumProperty("Transport Hint", "raw", "Preferred method of sending images.", this,
+                       SLOT(onImageTopicChanged()));
+
+  // map for calling fillTransportOptionList with topic_property argument
+//  QSignalMapper* signalMapper = new QSignalMapper (this);
+  connect(front_transport_property_, SIGNAL(requestOptions(EnumProperty*)), this,
+          [=]() { this->fillTransportOptionList(image_topic_front_property_); });
+
+  image_topic_rear_property_ = new RosTopicProperty(
+      "Rear camera image", "",
       QString::fromStdString(ros::message_traits::datatype<sensor_msgs::Image>()),
-      "Image topic of the rear camera to subscribe to.",
-      this, SLOT(onImageTopicChanged()));
-  ref_frame_property_ = new TfFrameProperty("Reference frame", "<Fixed Frame>",
-      "Position the sphere relative to this frame.",
-      this, 0, true);
+      "Image topic of the rear camera to subscribe to.", this, SLOT(onImageTopicChanged()));
+  ref_frame_property_ =
+      new TfFrameProperty("Reference frame", "<Fixed Frame>",
+                          "Position the sphere relative to this frame.", this, 0, true);
 
-  fov_front_property_ = new FloatProperty("FOV front", 235.0,
-      "Front camera field of view", this, SLOT(onMeshParamChanged()));
+  fov_front_property_ = new FloatProperty("FOV front", 235.0, "Front camera field of view", this,
+                                          SLOT(onMeshParamChanged()));
 
-  fov_rear_property_= new FloatProperty("FOV rear", 235.0,
-      "Rear camera field of view", this, SLOT(onMeshParamChanged()));
+  fov_rear_property_ = new FloatProperty("FOV rear", 235.0, "Rear camera field of view", this,
+                                         SLOT(onMeshParamChanged()));
 
-  blend_angle_property_= new FloatProperty("Blend angle", 20,
-      "Specifies the size of a region, where two images overlap and are blended together", 
-	  this, SLOT(onMeshParamChanged()));
+  blend_angle_property_ =
+      new FloatProperty("Blend angle", 20, "Specifies the size of a region, where two images "
+                                           "overlap and are blended together",
+                        this, SLOT(onMeshParamChanged()));
 
   // Create and load a separate resourcegroup
   std::string path_str = ros::package::getPath(ROS_PACKAGE_NAME);
-  Ogre::ResourceGroupManager::getSingleton().addResourceLocation( path_str + "/ogre_media", "FileSystem", ROS_PACKAGE_NAME  );
+  Ogre::ResourceGroupManager::getSingleton().addResourceLocation(path_str + "/ogre_media",
+                                                                 "FileSystem", ROS_PACKAGE_NAME);
   Ogre::ResourceGroupManager::getSingleton().initialiseResourceGroup(ROS_PACKAGE_NAME);
 
-  //try to create texture_unit_state
+  // try to create texture_unit_state
   texture_front_ = new ROSImageTexture();
   texture_rear_ = new ROSImageTexture();
-  if(!texture_front_ || !texture_rear_)
+  if (!texture_front_ || !texture_rear_)
   {
-	  ROS_ERROR("Failed to create ROSImageTextures.");
+    ROS_ERROR("Failed to create ROSImageTextures.");
   }
   else
   {
-	  ROS_INFO("Created new texture: %s", texture_front_->getTexture()->getName().c_str());
-	  ROS_INFO("Created new texture: %s", texture_rear_->getTexture()->getName().c_str());
+    ROS_INFO("Created new texture: %s", texture_front_->getTexture()->getName().c_str());
+    ROS_INFO("Created new texture: %s", texture_rear_->getTexture()->getName().c_str());
   }
 }
 
@@ -126,6 +143,7 @@ void SphereDisplay::onInitialize()
 {
 	ref_frame_property_->setFrameManager(context_->getFrameManager());
 	createSphere();
+  scanForTransportSubscriberPlugins();
 	Display::onInitialize();
 }
 
@@ -292,6 +310,70 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
 	return mesh;
 }
 
+void SphereDisplay::scanForTransportSubscriberPlugins()
+{
+  pluginlib::ClassLoader<image_transport::SubscriberPlugin> sub_loader(
+      "image_transport", "image_transport::SubscriberPlugin");
+
+  // Subscriber class names have the following format "image_transport/compressed_sub"
+  // The following regex will cut off _sub and everything before /, leaving only the
+  // transport name
+  for (auto lookup_name : sub_loader.getDeclaredClasses())
+  {
+    std::regex rgx("/([a-zA-Z0-9]+)_sub");
+    std::smatch matches;
+
+    if (std::regex_search(lookup_name, matches, rgx) && matches.size() > 1)
+    {
+      transport_plugin_types_.insert(matches[1].str());
+    }
+
+  }
+}
+
+void SphereDisplay::fillTransportOptionList(RosTopicProperty* topic_property)
+{
+  ROS_WARN("HEREEEE....");
+  EnumProperty* enum_property = static_cast<EnumProperty*>(QObject::sender());
+  enum_property->clearOptions();
+  std::vector<std::string> choices;
+  choices.push_back("raw");
+
+  // Loop over all current ROS topic names
+  ros::master::V_TopicInfo topics;
+  ros::master::getTopics(topics);
+  ros::master::V_TopicInfo::iterator it = topics.begin();
+  ros::master::V_TopicInfo::iterator end = topics.end();
+  for (; it != end; ++it)
+  {
+    // If the beginning of this topic name is the same as topic_,
+    // and the whole string is not the same,
+    // and the next character is /
+    // and there are no further slashes from there to the end,
+    // then consider this a possible transport topic.
+    const ros::master::TopicInfo& ti = *it;
+    const std::string& topic_name = ti.name;
+    const std::string& topic = topic_property->getStdString();
+
+    if (topic_name.find(topic) == 0 && topic_name != topic && topic_name[topic.size()] == '/' &&
+        topic_name.find('/', topic.size() + 1) == std::string::npos)
+    {
+      std::string transport_type = topic_name.substr(topic.size() + 1);
+
+      // If the transport type string found above is in the set of
+      // supported transport type plugins, add it to the list.
+      if (transport_plugin_types_.find(transport_type) != transport_plugin_types_.end())
+      {
+        choices.push_back(transport_type);
+      }
+    }
+  }
+
+  for (size_t i = 0; i < choices.size(); i++)
+  {
+    enum_property->addOptionStd(choices[i]);
+  }
+}
 
 void SphereDisplay::updateFrontCameraImage(const sensor_msgs::Image::ConstPtr& image)
 {

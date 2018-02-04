@@ -99,6 +99,7 @@ private Q_SLOTS:
   void updateMeshProperties();
   void onImageTopicChanged();
   void onMeshParamChanged();
+  void fillTransportOptionList(RosTopicProperty* topic_property);
 
 protected:
   // overrides from Display
@@ -112,6 +113,7 @@ protected:
 
 private:
   void clear();
+  void scanForTransportSubscriberPlugins();
   void updateFrontCameraImage(const sensor_msgs::Image::ConstPtr& image);
   void updateRearCameraImage(const sensor_msgs::Image::ConstPtr& image);
   void createSphere();
@@ -119,8 +121,11 @@ private:
   void imageToTexture(ROSImageTexture*& texture, const sensor_msgs::Image::ConstPtr& msg);
   void clearStates();
 
+  std::set<std::string> transport_plugin_types_;
   RosTopicProperty* image_topic_front_property_;
+  EnumProperty* front_transport_property_;
   RosTopicProperty* image_topic_rear_property_;
+  EnumProperty* rear_transport_property_;
   TfFrameProperty* ref_frame_property_;
   FloatProperty* fov_front_property_;
   FloatProperty* fov_rear_property_;

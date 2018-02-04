@@ -1,12 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-
   <node pkg="rviz" type="rviz" name="rviz"
-      args="-l -d $(find rviz_textured_sphere)/rviz_cfg/rviz_textured_sphere.rviz"
-      output="screen"/>
-
-  <arg name="pub_demo_textures" default="false"/>                                                                  
-
-  <node if="$(arg pub_demo_textures)" pkg="rosbag" type="play" name="play_360_video" args="-l $(find rviz_textured_sphere)/bag/demo_textures.bag" />
-
+    args="-l -d $(find rviz_textured_sphere)/rviz_cfg/rviz_textured_sphere.rviz"
+    output="screen"/>
 </launch>

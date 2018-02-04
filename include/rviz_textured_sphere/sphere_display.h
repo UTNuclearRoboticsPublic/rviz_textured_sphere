@@ -1,65 +1,59 @@
-/* Copyright (c) 2013-2015 Team ViGIR ( TORC Robotics LLC, TU Darmstadt, Virginia Tech, Oregon State University, Cornell University, and Leibniz University Hanover )
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the Willow Garage, Inc. nor the names of its
- *       contributors may be used to endorse or promote products derived from
- *       this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+///////////////////////////////////////////////////////////////////////////////
+//      Title     : sphere_display.h
+//      Project   : rviz_textured_sphere
+//      Created   : 7/13/2017
+//      Author    : Veiko Vunder
+//      Platforms : Ubuntu 64-bit
+//      Copyright : Copyright© The University of Texas at Austin, 2017-2018. All rights reserved.
+//
+//          All files within this directory are subject to the following, unless an alternative
+//          license is explicitly included within the text of each file.
+//
+//          This software and documentation constitute an unpublished work
+//          and contain valuable trade secrets and proprietary information
+//          belonging to the University. None of the foregoing material may be
+//          copied or duplicated or disclosed without the express, written
+//          permission of the University. THE UNIVERSITY EXPRESSLY DISCLAIMS ANY
+//          AND ALL WARRANTIES CONCERNING THIS SOFTWARE AND DOCUMENTATION,
+//          INCLUDING ANY WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A
+//          PARTICULAR PURPOSE, AND WARRANTIES OF PERFORMANCE, AND ANY WARRANTY
+//          THAT MIGHT OTHERWISE ARISE FROM COURSE OF DEALING OR USAGE OF TRADE.
+//          NO WARRANTY IS EITHER EXPRESS OR IMPLIED WITH RESPECT TO THE USE OF
+//          THE SOFTWARE OR DOCUMENTATION. Under no circumstances shall the
+//          University be liable for incidental, special, indirect, direct or
+//          consequential damages or loss of profits, interruption of business,
+//          or related expenses which may arise from use of software or documentation,
+//          including but not limited to those resulting from defects in software
+//          and/or documentation, or loss or inaccuracy of data of any kind.
+//
+///////////////////////////////////////////////////////////////////////////////
 
-#pragma once
+#ifndef SPHERE_DISPLAY_H
+#define SPHERE_DISPLAY_H
 
 #include <QObject>
 // kinetic compatibility http://answers.ros.org/question/233786/parse-error-at-boost_join/
 #ifndef Q_MOC_RUN
 
 #include <OGRE/OgreEntity.h>
-#include <OGRE/OgreMesh.h>
-#include <OGRE/OgreManualObject.h>
-#include <OGRE/OgreRenderQueueListener.h>
-#include <OGRE/OgreRenderSystem.h>
-#include <OGRE/OgreRenderTargetListener.h>
-#include <OGRE/OgreRenderWindow.h>
-#include <OGRE/OgreRoot.h>
 #include <OGRE/OgreSceneNode.h>
-#include <OGRE/OgreVector3.h>
+#include <OGRE/OgreManualObject.h>
+#include <OGRE/OgreMesh.h>
+#include <OGRE/OgreRenderQueueListener.h>
+#include <OGRE/OgreRenderTargetListener.h>
 #include <OGRE/OgreWindowEventUtilities.h>
-#include <geometry_msgs/Pose.h>
-#include <geometry_msgs/PoseStamped.h>
-#include <image_transport/image_transport.h>
-#include <map>
-#include <message_filters/subscriber.h>
+
 #include <rviz/display.h>
 #include <rviz/frame_manager.h>
 #include <rviz/image/image_display_base.h>
 #include <rviz/image/ros_image_texture.h>
+
+#include <std_msgs/Float64.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
 #include <shape_msgs/Mesh.h>
-#include <std_msgs/Float64.h>
-#include <tf/message_filter.h>
-#include <tf/tf.h>
-#include <tf/transform_listener.h>
-#include <vector>
+#include <image_transport/image_transport.h>
+#include <set>
 
 #endif  // Q_MOC_RUN
 
@@ -81,7 +75,9 @@ class TfFrameProperty;
  * \class SphereDisplay
  * \brief Uses a pose from topic + offset to render a bounding object with shape, size and color
  */
-class SphereDisplay: public rviz::Display,  public Ogre::RenderTargetListener, public Ogre::RenderQueueListener
+class SphereDisplay : public rviz::Display,
+                      public Ogre::RenderTargetListener,
+                      public Ogre::RenderQueueListener
 {
   Q_OBJECT
 public:
@@ -99,7 +95,7 @@ private Q_SLOTS:
   void updateMeshProperties();
   void onImageTopicChanged();
   void onMeshParamChanged();
-  void fillTransportOptionList(RosTopicProperty* topic_property);
+  void fillTransportOptionList(EnumProperty* enum_property);
 
 protected:
   // overrides from Display
@@ -117,11 +113,12 @@ private:
   void updateFrontCameraImage(const sensor_msgs::Image::ConstPtr& image);
   void updateRearCameraImage(const sensor_msgs::Image::ConstPtr& image);
   void createSphere();
-  Ogre::MeshPtr createSphereMesh(const std::string& mesh_name, const double r, const unsigned int ring_cnt, const unsigned int segment_cnt);
+  Ogre::MeshPtr createSphereMesh(const std::string& mesh_name, const double r,
+                                 const unsigned int ring_cnt, const unsigned int segment_cnt);
   void imageToTexture(ROSImageTexture*& texture, const sensor_msgs::Image::ConstPtr& msg);
   void clearStates();
 
-  std::set<std::string> transport_plugin_types_;
+  // Property objects
   RosTopicProperty* image_topic_front_property_;
   EnumProperty* front_transport_property_;
   RosTopicProperty* image_topic_rear_property_;
@@ -131,25 +128,27 @@ private:
   FloatProperty* fov_rear_property_;
   FloatProperty* blend_angle_property_;
 
-  ros::Subscriber image_sub_front_;
-  ros::Subscriber image_sub_rear_;
+  // Image transport
+  std::unique_ptr<image_transport::ImageTransport> it_front_;
+  std::unique_ptr<image_transport::ImageTransport> it_rear_;
+  std::shared_ptr<image_transport::SubscriberFilter> sub_front_;
+  std::shared_ptr<image_transport::SubscriberFilter> sub_rear_;
+  std::set<std::string> transport_plugin_types_;
 
-  ros::NodeHandle nh_;
+  // Ogre and textures
+  Ogre::SceneNode* sphere_node_;
+  Ogre::MaterialPtr sphere_material_;
+  ROSImageTexture* texture_front_;  // Texture for front camera image
+  ROSImageTexture* texture_rear_;   // Texture for rear camera image
+  RenderPanel* render_panel_;       // this is the active render panel
 
   bool new_front_image_arrived_;
   bool new_rear_image_arrived_;
   sensor_msgs::Image::ConstPtr cur_image_front_;
   sensor_msgs::Image::ConstPtr cur_image_rear_;
-
-  Ogre::SceneNode* sphere_node_;
-  Ogre::MaterialPtr sphere_material_;
-  ROSImageTexture* texture_front_; // Texture for front camera image
-  ROSImageTexture* texture_rear_; // Texture for rear camera image
-
-  RenderPanel* render_panel_;  // this is the active render panel
+  ros::NodeHandle nh_;
 };
 
 }  // namespace rviz
 
-
-
+#endif  // SPHERE_DISPLAY_H

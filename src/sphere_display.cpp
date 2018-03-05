@@ -67,16 +67,6 @@
 
 namespace rviz
 {
-// bool validateFloats(const sensor_msgs::CameraInfo& msg)
-//{
-//  bool valid = true;
-//  valid = valid && validateFloats(msg.D);
-//  valid = valid && validateFloats(msg.K);
-//  valid = valid && validateFloats(msg.R);
-//  valid = valid && validateFloats(msg.P);
-//  return valid;
-//}
-
 SphereDisplay::SphereDisplay()
   : Display()
   , sub_front_()
@@ -113,14 +103,23 @@ SphereDisplay::SphereDisplay()
       new TfFrameProperty("Reference frame", "<Fixed Frame>",
                           "Position the sphere relative to this frame.", this, 0, true);
 
-  fov_front_property_ = new FloatProperty("FOV front", 235.0, "Front camera field of view", this,
+  radius_property_ = new FloatProperty("Radius", 10, "Sphere radius.", this,
+                                       SLOT(onMeshParamChanged()));
+
+  ring_cnt_property_ = new IntProperty("Ring count", 64, "Number of rings in the sphere.", this,
+                                       SLOT(onMeshParamChanged()));
+  
+  segment_cnt_property_ = new IntProperty("Segment count", 64, "Number of segments in the sphere.", this,
+                                       SLOT(onMeshParamChanged()));
+
+  fov_front_property_ = new FloatProperty("FOV front", 235.0, "Front camera field of view (degrees)", this,
                                           SLOT(onMeshParamChanged()));
 
-  fov_rear_property_ = new FloatProperty("FOV rear", 235.0, "Rear camera field of view", this,
+  fov_rear_property_ = new FloatProperty("FOV rear", 235.0, "Rear camera field of view (degrees)", this,
                                          SLOT(onMeshParamChanged()));
 
   blend_angle_property_ =
-      new FloatProperty("Blend angle", 20, "Specifies the size of a region, where two images "
+      new FloatProperty("Blend angle", 20, "Specifies the size of a region (in degrees), where two images "
                                            "overlap and are blended together",
                         this, SLOT(onMeshParamChanged()));
 
@@ -147,15 +146,15 @@ SphereDisplay::SphereDisplay()
 SphereDisplay::~SphereDisplay()
 {
   unsubscribe();
-  Ogre::String node_name(ROS_PACKAGE_NAME "_node");
-  Ogre::String mesh_name(ROS_PACKAGE_NAME "_mesh");
-  scene_manager_->getRootSceneNode()->removeAndDestroyChild(node_name);
-  Ogre::MeshManager::getSingleton().remove(mesh_name);
+  destroySphere();
   delete texture_front_;
   delete texture_rear_;
   delete image_topic_front_property_;
   delete image_topic_rear_property_;
   delete ref_frame_property_;
+  delete radius_property_;
+  delete ring_cnt_property_;
+  delete segment_cnt_property_;
   delete fov_front_property_;
   delete fov_rear_property_;
   delete blend_angle_property_;
@@ -196,15 +195,19 @@ void SphereDisplay::createSphere()
   sphere_node_ =
       scene_manager_->getRootSceneNode()->createChildSceneNode(node_name, Ogre::Vector3(0, 0, 0));
 
-  Ogre::MeshPtr sphere_mesh = createSphereMesh(ROS_PACKAGE_NAME "_mesh", 10, 64, 64);
+  Ogre::MeshPtr sphere_mesh = createSphereMesh(ROS_PACKAGE_NAME "_mesh",
+                                               radius_property_->getFloat(),
+                                               ring_cnt_property_->getInt(),
+                                               segment_cnt_property_->getInt());
+
   Ogre::Entity* sphere_entity = scene_manager_->createEntity(sphere_mesh);
   sphere_entity->setMaterialName(material_name);
   sphere_node_->attachObject(sphere_entity);
 }
 
 Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, const double r,
-                                              const unsigned int ring_cnt = 32,
-                                              const unsigned int segment_cnt = 32)
+                                              const unsigned int ring_cnt,
+                                              const unsigned int segment_cnt)
 {
   Ogre::MeshPtr mesh = Ogre::MeshManager::getSingleton().createManual(mesh_name, ROS_PACKAGE_NAME);
   Ogre::SubMesh* sub_mesh = mesh->createSubMesh();
@@ -334,6 +337,14 @@ Ogre::MeshPtr SphereDisplay::createSphereMesh(const std::string& mesh_name, cons
   return mesh;
 }
 
+void SphereDisplay::destroySphere()
+{
+  Ogre::String node_name(ROS_PACKAGE_NAME "_node");
+  Ogre::String mesh_name(ROS_PACKAGE_NAME "_mesh");
+  scene_manager_->getRootSceneNode()->removeAndDestroyChild(node_name);
+  Ogre::MeshManager::getSingleton().remove(mesh_name);
+}
+
 void SphereDisplay::scanForTransportSubscriberPlugins()
 {
   pluginlib::ClassLoader<image_transport::SubscriberPlugin> sub_loader(
@@ -420,11 +431,8 @@ void SphereDisplay::onImageTopicChanged()
 
 void SphereDisplay::onMeshParamChanged()
 {
-  // Reload sphere mesh when some of its parameters have changed
-  Ogre::String node_name(ROS_PACKAGE_NAME "_node");
-  Ogre::String mesh_name(ROS_PACKAGE_NAME "_mesh");
-  scene_manager_->getRootSceneNode()->removeAndDestroyChild(node_name);
-  Ogre::MeshManager::getSingleton().remove(mesh_name);
+  // Reconstruct sphere mesh when some of its parameters have changed
+  destroySphere();
   createSphere();
 }
 
@@ -501,10 +509,7 @@ void SphereDisplay::onEnable()
 void SphereDisplay::onDisable()
 {
   unsubscribe();
-  Ogre::String node_name(ROS_PACKAGE_NAME "_node");
-  Ogre::String mesh_name(ROS_PACKAGE_NAME "_mesh");
-  scene_manager_->getRootSceneNode()->removeAndDestroyChild(node_name);
-  Ogre::MeshManager::getSingleton().remove(mesh_name);
+  destroySphere();
 }
 
 void SphereDisplay::preRenderTargetUpdate(const Ogre::RenderTargetEvent& evt)

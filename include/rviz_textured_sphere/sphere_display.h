@@ -115,6 +115,7 @@ private:
   void createSphere();
   Ogre::MeshPtr createSphereMesh(const std::string& mesh_name, const double r,
                                  const unsigned int ring_cnt, const unsigned int segment_cnt);
+  void destroySphere();
   void imageToTexture(ROSImageTexture*& texture, const sensor_msgs::Image::ConstPtr& msg);
   void clearStates();
 
@@ -124,6 +125,9 @@ private:
   RosTopicProperty* image_topic_rear_property_;
   EnumProperty* rear_transport_property_;
   TfFrameProperty* ref_frame_property_;
+  FloatProperty* radius_property_;
+  IntProperty* ring_cnt_property_;
+  IntProperty* segment_cnt_property_;
   FloatProperty* fov_front_property_;
   FloatProperty* fov_rear_property_;
   FloatProperty* blend_angle_property_;

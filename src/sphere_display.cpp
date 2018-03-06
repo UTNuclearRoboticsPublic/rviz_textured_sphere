@@ -76,7 +76,9 @@ SphereDisplay::SphereDisplay()
   , texture_rear_(NULL)
   , new_front_image_arrived_(false)
   , new_rear_image_arrived_(false)
+  , nh_("/rviz_textured_sphere")
 {
+  // Initialize properties
   image_topic_front_property_ = new RosTopicProperty(
       "Front camera image", "",
       QString::fromStdString(ros::message_traits::datatype<sensor_msgs::Image>()),
@@ -372,6 +374,7 @@ void SphereDisplay::fillTransportOptionList(EnumProperty* enum_property)
                                  image_topic_front_property_->getStdString() :
                                  image_topic_rear_property_->getStdString();
 
+  // raw by default
   enum_property->clearOptions();
   std::vector<std::string> choices;
   choices.push_back("raw");
@@ -444,7 +447,7 @@ void SphereDisplay::subscribe()
     return;
   }
 
-  const uint32_t queue_size = 1;
+  const uint32_t queue_size = 2;
   sub_front_.reset(new image_transport::SubscriberFilter());
   sub_rear_.reset(new image_transport::SubscriberFilter());
 
@@ -593,19 +596,6 @@ void SphereDisplay::update(float wall_dt, float ros_dt)
 void SphereDisplay::imageToTexture(ROSImageTexture*& texture,
                                    const sensor_msgs::Image::ConstPtr& msg)
 {
-  cv_bridge::CvImagePtr cv_ptr;
-
-  // convert every image to RGBA
-  try
-  {
-    cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::RGBA8);
-  }
-  catch (cv_bridge::Exception& e)
-  {
-    ROS_ERROR("imageToTexture: cv_bridge exception: %s", e.what());
-    return;
-  }
-
   if (!texture)
   {
     ROS_ERROR("imageToTexture: Texture is NULL:");
@@ -613,7 +603,7 @@ void SphereDisplay::imageToTexture(ROSImageTexture*& texture,
   }
 
   // add arrived image to ROSImageTexture
-  texture->addMessage(cv_ptr->toImageMsg());
+  texture->addMessage(msg);
 
   // check if material and render pass are loaded and
   // assign texture to ogre's texture unit state

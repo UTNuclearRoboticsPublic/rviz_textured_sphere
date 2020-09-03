@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
   <node pkg="rviz" type="rviz" name="rviz"
-    args="-l -d $(find rviz_textured_sphere)/rviz_cfg/rviz_textured_sphere.rviz"
+    args="-d $(find rviz_textured_sphere)/rviz_cfg/rviz_textured_sphere.rviz"
     output="screen"/>
 </launch>

@@ -131,6 +131,7 @@ private:
   FloatProperty* fov_front_property_;
   FloatProperty* fov_rear_property_;
   FloatProperty* blend_angle_property_;
+  BoolProperty* padding_property_;
 
   // Image transport
   std::unique_ptr<image_transport::ImageTransport> it_front_;

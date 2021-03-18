@@ -123,6 +123,9 @@ SphereDisplay::SphereDisplay()
                                            "overlap and are blended together",
                         this, SLOT(onMeshParamChanged()));
 
+  padding_property_ = new BoolProperty("Padding", false, "Pads the images to keep aspect ration", this,
+                                       SLOT(onMeshParamChanged()));
+
   // Create and load a separate resourcegroup
   std::string path_str = ros::package::getPath(ROS_PACKAGE_NAME);
   Ogre::ResourceGroupManager::getSingleton().addResourceLocation(path_str + "/ogre_media",
@@ -158,6 +161,7 @@ SphereDisplay::~SphereDisplay()
   delete fov_front_property_;
   delete fov_rear_property_;
   delete blend_angle_property_;
+  delete padding_property_;
   Ogre::ResourceGroupManager::getSingleton().destroyResourceGroup(ROS_PACKAGE_NAME);
 }
 
@@ -594,11 +598,34 @@ void SphereDisplay::imageToTexture(ROSImageTexture*& texture,
                                    const sensor_msgs::Image::ConstPtr& msg)
 {
   cv_bridge::CvImagePtr cv_ptr;
+  cv::Mat pad_image;
 
   // convert every image to RGBA
   try
   {
     cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::RGBA8);
+    if (!padding_property_->getBool() || msg->height == msg->width)
+    {
+      pad_image = cv_ptr->image;
+    }
+    else
+    {
+      int pad_top = 0;
+      int pad_bottom = 0;
+      int pad_left = 0;
+      int pad_right = 0;
+      cv::Scalar pad_value = cv::Scalar(0, 0, 0);
+      if (msg->height > msg->width) {
+        pad_left = (int)((msg->height - msg->width) / 2.0);
+        pad_right = (int)(msg->height - msg->width - pad_left);
+      }
+      else
+      {
+        pad_top = (int)((msg->width - msg->height) / 2.0);
+        pad_bottom = (int)(msg->width - msg->height - pad_top);
+      }
+      cv::copyMakeBorder(cv_ptr->image, pad_image, pad_top, pad_bottom, pad_left, pad_right, cv::BORDER_CONSTANT, pad_value);
+    }
   }
   catch (cv_bridge::Exception& e)
   {
@@ -613,7 +640,7 @@ void SphereDisplay::imageToTexture(ROSImageTexture*& texture,
   }
 
   // add arrived image to ROSImageTexture
-  texture->addMessage(cv_ptr->toImageMsg());
+  texture->addMessage(cv_bridge::CvImage(msg->header, "rgba8", pad_image).toImageMsg());
 
   // check if material and render pass are loaded and
   // assign texture to ogre's texture unit state
